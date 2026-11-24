@@ -1,4 +1,4 @@
-"""任务服务：安全评估任务与报告的创建逻辑，供 REST API 与智能工作复用。"""
+"""任务服务：渗透测试任务与报告的创建逻辑，供 REST API 与智能工作复用。"""
 from __future__ import annotations
 
 import json
@@ -49,7 +49,7 @@ async def create_scan_task(
     if not items:
         raise TaskError("请至少选择一个资产或填写一个目标")
     if len(items) > 60:
-        raise TaskError("单次评估最多支持 60 个目标")
+        raise TaskError("单次测试最多支持 60 个目标")
     # 授权范围已取消：登录免责声明即为授权，用户给出的目标直接进队列。
     # 这里只挡格式上有问题的目标（空、带空格、超长），不再按域名 / 网段核对。
     format_errors = validate_scope(items)
@@ -94,7 +94,7 @@ def create_report_task(scan_id: int, title: str, username: str) -> dict:
         if not row:
             raise TaskError("任务不存在")
         if row["status"] != "completed":
-            raise TaskError("仅已完成的评估可生成报告")
+            raise TaskError("仅已完成的测试可生成报告")
         scan = dict(row)
         scan["targets"] = json.loads(scan.pop("targets_json") or "[]")
         scan["stats"] = json.loads(scan.pop("stats_json") or "{}")
@@ -112,7 +112,7 @@ def create_report_task(scan_id: int, title: str, username: str) -> dict:
             ).fetchall()
         ]
 
-    title = title.strip() or f"{scan.get('name')} 安全评估报告"
+    title = title.strip() or f"{scan.get('name')} 渗透测试报告"
     html = build_report_html(scan, findings, logs)
     filename = f"report-{scan_id}-{datetime.now().strftime('%Y%m%d%H%M%S')}.html"
     path = REPORTS_DIR / filename

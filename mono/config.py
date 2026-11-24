@@ -21,7 +21,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 SECRET_PATH = DATA_DIR / ".secret"
 
 APP_NAME = "K7so"
-APP_SUBTITLE = "智能安全工作台"
+APP_SUBTITLE = "Agent 渗透测试平台"
 APP_VERSION = "3.5.1"
 
 # 默认用普通浏览器 UA：目标是业务系统时，非浏览器指纹容易被 WAF 直接拦掉

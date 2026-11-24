@@ -5,7 +5,7 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const SEV_LABELS = { critical: "严重", high: "高危", medium: "中危", low: "低危", info: "信息" };
 const STATUS_LABELS = { queued: "排队", running: "运行中", completed: "已完成", failed: "失败", cancelled: "已取消" };
 const PAGE_TITLES = {
-  dashboard: "仪表盘", chat: "智能工作", assets: "资产监管", kits: "K7so工具", scans: "安全评估",
+  dashboard: "仪表盘", chat: "智能工作", assets: "资产监管", kits: "K7so工具", scans: "渗透测试",
   findings: "漏洞结果", connectors: "API 中心", paths: "目录配置", capabilities: "模型能力",
   audit: "审计日志", settings: "平台设置",
 };
@@ -364,7 +364,7 @@ async function loadDashboard() {
   const stats = data.stats;
   $("#dash-stats").innerHTML = [
     ["纳管资产", stats.assets, "ASSETS IN SCOPE"],
-    ["安全评估", stats.scans, `${stats.running} 个进行中`],
+    ["渗透测试", stats.scans, `${stats.running} 个进行中`],
     ["待处理风险", stats.open_findings, "OPEN / CONFIRMED"],
     ["风险指数", `${stats.risk_score}<small>/100</small>`, "WEIGHTED SEVERITY"],
     ["连接器健康", `${stats.connectors_healthy}<small>/${stats.connectors}</small>`, `已配置 ${stats.connectors_configured}`],
@@ -401,7 +401,7 @@ async function loadDashboard() {
         <td class="td-title"><strong>${esc(scan.name)}</strong><small>#${scan.id} · ${esc(scan.created_at)}</small></td>
         <td>${statusBadge(scan.status)}</td>
         <td class="mono-cell">${scan.finding_count}</td>
-      </tr>`).join("") : emptyRow(3, "还没有评估作业，点击右上角新建评估")}
+      </tr>`).join("") : emptyRow(3, "还没有渗透测试作业，点击右上角新建渗透测试")}
     </tbody></table>`;
   $$("#dash-scans tr[data-scan]").forEach((row) => row.addEventListener("click", () => openScanDetail(Number(row.dataset.scan))));
 
@@ -893,7 +893,7 @@ $("#dash-new-scan").addEventListener("click", openNewScanModal);
 $("#dash-refresh").addEventListener("click", () => navigate("dashboard"));
 
 /* ---------------- scans ---------------- */
-// 「安全评估」页已经换成 K7so工具页，这里只剩仪表盘还要用的详情弹窗。
+// 「渗透测试」页已经换成 K7so工具页，这里只剩仪表盘还要用的详情弹窗。
 // 没有表格元素时直接返回，避免旧入口被误调用时整页脚本崩掉。
 async function loadScans() {
   if (!$("#scan-table")) return;
@@ -915,7 +915,7 @@ async function loadScans() {
           <button class="btn ghost small" data-scan-view="${scan.id}">详情</button>
           ${["queued", "running"].includes(scan.status) ? `<button class="btn ghost small" data-scan-cancel="${scan.id}">取消</button>` : ""}
         </td>
-      </tr>`).join("") : emptyRow(9, "暂无评估作业，点击右上角新建评估")}
+      </tr>`).join("") : emptyRow(9, "暂无渗透测试作业，点击右上角新建渗透测试")}
     </tbody></table>`;
   $$("[data-scan-view]").forEach((btn) => btn.addEventListener("click", () => openScanDetail(Number(btn.dataset.scanView))));
   $$("[data-scan-cancel]").forEach((btn) => btn.addEventListener("click", async () => {
@@ -937,15 +937,15 @@ async function openNewScanModal() {
     }
   }
   const overlay = openModal({
-    title: "新建安全评估",
+    title: "新建渗透测试",
     wide: true,
     body: `
       <div class="form-grid">
-        <label class="field"><span>作业名称（可选）</span><input id="f-name" placeholder="例如 外网暴露面评估"></label>
+        <label class="field"><span>作业名称（可选）</span><input id="f-name" placeholder="例如 外网暴露面测试"></label>
         <div class="grid-2" style="gap:12px">
           <label class="field"><span>模式</span>
             <select id="f-mode">
-              <option value="active">完整评估（测绘 + 端口 + 模板 + AI）</option>
+              <option value="active">完整渗透测试（测绘 + 端口 + 模板 + AI）</option>
               <option value="passive">仅情报测绘（调用已配置的数据源）</option>
             </select>
           </label>
@@ -967,9 +967,9 @@ async function openNewScanModal() {
                 <span>${esc(asset.name)}</span><em>${esc(asset.target)}</em></label>`).join("") : `<span class="muted">资产台账为空</span>`}
           </div>
         </label>
-        <div class="notice">授权已在登录免责声明中确认，无需填写编号。评估开始前会执行范围校验：目标需落在「平台设置」的授权域名 / 网段内；平台默认排除 DoS、爆破与侵入型模板。</div>
+        <div class="notice">授权已在登录免责声明中确认，无需填写编号。开始前会执行范围校验：目标需落在「平台设置」的授权域名 / 网段内；平台默认排除 DoS、爆破与侵入型模板。</div>
       </div>`,
-    footer: `<button class="btn ghost" id="f-cancel">取消</button><button class="btn primary" id="f-start">开始评估</button>`,
+    footer: `<button class="btn ghost" id="f-cancel">取消</button><button class="btn primary" id="f-start">开始测试</button>`,
   });
   $("#f-cancel", overlay).addEventListener("click", () => overlay.remove());
   $("#f-start", overlay).addEventListener("click", async () => {
@@ -988,7 +988,7 @@ async function openNewScanModal() {
         },
       });
       overlay.remove();
-      toast(`评估作业 #${data.id} 已加入队列`);
+      toast(`渗透测试作业 #${data.id} 已加入队列`);
       if (state.page === "scans") await loadScans();
       navigate("scans");
       setTimeout(() => openScanDetail(data.id), 600);
@@ -1091,7 +1091,7 @@ function renderScanDrawer() {
           <div id="tab-body"></div>
         </div>
         <div class="drawer-foot">
-          <button class="btn ghost" id="drawer-cancel">终止评估</button>
+          <button class="btn ghost" id="drawer-cancel">终止测试</button>
           <button class="btn ghost" id="drawer-json">导出 JSON</button>
           <button class="btn ghost" id="drawer-csv">导出 CSV</button>
         </div>
@@ -1273,7 +1273,7 @@ async function loadFindings(options = {}) {
 async function openFinding(findingId) {
   try {
     const finding = await api(`/api/findings/${findingId}`);
-    const owner = finding.scan_id ? (finding.scan_name || `评估 #${finding.scan_id}`) : "AI 对话归档";
+    const owner = finding.scan_id ? (finding.scan_name || `测试 #${finding.scan_id}`) : "AI 对话归档";
     const overlay = openModal({
       title: `漏洞报告 #${finding.id}`,
       wide: true,
@@ -2052,7 +2052,7 @@ $("#paths-save").addEventListener("click", async () => {
 });
 
 /* ---------------- smart work ---------------- */
-const MODE_LABELS = { active: "完整评估", passive: "情报测绘" };
+const MODE_LABELS = { active: "完整渗透测试", passive: "情报测绘" };
 const PROFILE_LABELS = { quick: "快速", standard: "标准", deep: "深度" };
 const modeLabel = (mode) => MODE_LABELS[mode] || mode || "—";
 const profileLabel = (profile) => PROFILE_LABELS[profile] || profile || "—";

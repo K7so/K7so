@@ -499,7 +499,7 @@ def test_prompt_contract() -> None:
     check("提示要求先给结论", "第一句就给判断或结论" in agent.SYSTEM_PROMPT)
     check("提示规定「继续」即授权执行", "视为授权你按推荐方案直接执行到底" in agent.SYSTEM_PROMPT)
     check("提示禁止重复追问", "同一个问题在一次会话里只问一次" in agent.SYSTEM_PROMPT)
-    check("提示统一「评估」措辞", "这件事叫「评估」" in agent.SYSTEM_PROMPT)
+    check("提示统一「渗透测试」措辞", "这件事叫「渗透测试」" in agent.SYSTEM_PROMPT)
     check("提示声明有命令执行能力", "不要回答\"我没有命令执行能力\"" in agent.SYSTEM_PROMPT)
     check("提示要求每步给进展", "每一步做完都要给一句进展" in agent.SYSTEM_PROMPT)
     check("提示说明进展会累积", "不断累积" in agent.SYSTEM_PROMPT)

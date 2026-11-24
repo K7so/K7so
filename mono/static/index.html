@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>K7so // Agent 自动化渗透测试平台</title>
-<link rel="stylesheet" href="/static/style.css?v=20261122c">
+<link rel="stylesheet" href="/static/style.css?v=20261124a">
 </head>
 <body>
 
@@ -26,7 +26,7 @@
     </form>
     <div class="login-foot">
       <span>初始口令：data/初始口令.txt 或启动日志</span>
-      <span>仅限已授权资产的安全评估</span>
+      <span>仅限已授权资产的渗透测试</span>
     </div>
   </div>
   <div class="login-meta">K7so v3.5.1 · AUTHORIZED USE ONLY</div>
@@ -37,11 +37,11 @@
     <div class="disclaimer-tag">LEGAL NOTICE / 免责声明</div>
     <h2>使用前请确认你已获得授权</h2>
     <div class="disclaimer-body">
-      <p><strong>一、授权前提。</strong>本平台仅限用于已取得合法授权的资产安全评估。登录即表示你确认对被测目标拥有明示授权，平台以此作为后续全部操作（含安全评估、风险验证与结论归档）的授权依据，无需另行填写编号。</p>
+      <p><strong>一、授权前提。</strong>本平台仅限用于已取得合法授权的资产渗透测试。登录即表示你确认对被测目标拥有明示授权，平台以此作为后续全部操作（含渗透测试、风险验证与结论归档）的授权依据，无需另行填写编号。</p>
       <p><strong>二、合法使用。</strong>禁止将本平台用于未授权目标、他人系统或任何违反《网络安全法》《数据安全法》《刑法》等法律法规的用途。对境外目标还须遵守当地法律。</p>
-      <p><strong>三、操作留痕。</strong>登录、配置变更、评估调度、风险归档与 AI 工具调用均会写入审计日志，记录操作人、时间与来源地址，日志不可删除。</p>
+      <p><strong>三、操作留痕。</strong>登录、配置变更、渗透测试调度、风险归档与 AI 工具调用均会写入审计日志，记录操作人、时间与来源地址，日志不可删除。</p>
       <p><strong>四、风险自担。</strong>平台会尽量采用只读、无破坏性验证，但任何安全测试都存在不可预见风险。因使用本平台造成的业务中断、数据损失或法律责任，由操作者及其所属组织自行承担。本工具由作者以开源方式提供，仅供已获授权的安全测试使用，使用者的全部行为及其后果由使用者本人承担，与作者无关。</p>
-      <p><strong>五、数据处置。</strong>测试过程中获取的数据仅用于本次评估，不得外传、留存或用于其他目的；评估结束后应按约定销毁。</p>
+      <p><strong>五、数据处置。</strong>测试过程中获取的数据仅用于本次渗透测试，不得外传、留存或用于其他目的；测试结束后应按约定销毁。</p>
     </div>
     <div class="disclaimer-actions">
       <button class="btn ghost" type="button" id="disclaimer-decline">不同意，退出登录</button>
@@ -55,7 +55,7 @@
   <aside class="sidebar">
     <div class="side-brand">
       <div class="logo">K7so<span>//</span></div>
-      <div class="logo-sub">AGENT PENTEST PLATFORM</div>
+      <div class="logo-sub">AGENT PENTEST</div>
     </div>
     <nav class="side-nav">
       <button class="nav-item active" data-page="dashboard"><span class="idx">01</span><span class="nav-label">仪表盘</span></button>
@@ -82,7 +82,7 @@
     <header class="topbar">
       <div class="crumb">
         <span id="page-title">仪表盘</span>
-        <span class="crumb-sub">/ 已授权目标自动化评估</span>
+        <span class="crumb-sub">/ 已授权目标自动化渗透测试</span>
       </div>
       <div class="top-right">
         <span id="clock" class="clock"></span>
@@ -95,10 +95,10 @@
       <div class="page-head">
         <div>
           <h1>态势总览</h1>
-          <p>资产、评估作业、风险与能力接入的实时视图。</p>
+          <p>资产、渗透测试作业、风险与能力接入的实时视图。</p>
         </div>
         <div class="actions">
-          <button class="btn primary" id="dash-new-scan">新建评估</button>
+          <button class="btn primary" id="dash-new-scan">新建渗透测试</button>
           <button class="btn" id="dash-refresh">刷新</button>
         </div>
       </div>
@@ -402,7 +402,7 @@
     <!-- 07 审计 -->
     <section class="page hidden" id="page-audit">
       <div class="page-head">
-        <div><h1>审计日志</h1><p>登录、资产变更、评估调度、能力接入与报告生成的全量留痕。</p></div>
+        <div><h1>审计日志</h1><p>登录、资产变更、渗透测试调度、能力接入与报告生成的全量留痕。</p></div>
         <div class="actions">
           <input class="input" id="audit-search" placeholder="搜索操作人 / 动作 / 详情">
         </div>
@@ -416,7 +416,7 @@
     <!-- 09 设置 -->
     <section class="page hidden" id="page-settings">
       <div class="page-head">
-        <div><h1>平台设置</h1><p>安全开关与评估性能参数。修改后立即生效。</p></div>
+        <div><h1>平台设置</h1><p>安全开关与渗透测试性能参数。修改后立即生效。</p></div>
         <div class="actions"><button class="btn primary" id="settings-save">保存设置</button></div>
       </div>
       <div class="settings-grid">
@@ -429,32 +429,32 @@
             </div>
             <div class="notice">
               不再需要填写授权域名或网段：你在登录时点过「知晓并同意」，就表示被测试的目标都已获得授权，
-              平台不会再为「这个域名在不在范围内」逐条询问。评估目标以你在对话里点名、或在资产台账里登记的内容为准，
-              每次发包与评估仍会写入审计日志。
+              平台不会再为「这个域名在不在范围内」逐条询问。测试目标以你在对话里点名、或在资产台账里登记的内容为准，
+              每次发包与测试仍会写入审计日志。
             </div>
           </div>
         </div>
         <div class="panel">
-          <div class="panel-head"><span>评估策略</span><span class="hint">ENGINE</span></div>
+          <div class="panel-head"><span>测试策略</span><span class="hint">ENGINE</span></div>
           <div class="form-grid">
             <label class="switch-row">
-              <span>安全模式（批量评估排除 DoS / 爆破；对话里改动数据的方法会先确认）</span>
+              <span>安全模式（批量测试排除 DoS / 爆破；对话里改动数据的方法会先确认）</span>
               <input type="checkbox" id="s-safe-mode">
             </label>
             <label class="switch-row">
-              <span>敏感路径探测（批量评估扫 .env / .git；关掉后对话读本机凭据不再确认）</span>
+              <span>敏感路径探测（批量测试扫 .env / .git；关掉后对话读本机凭据不再确认）</span>
               <input type="checkbox" id="s-sensitive-paths">
             </label>
             <label class="switch-row">
-              <span>启用 AI 研判（只影响批量评估，不关对话）</span>
+              <span>启用 AI 研判（只影响批量测试，不关对话）</span>
               <input type="checkbox" id="s-ai-enabled">
             </label>
             <label class="field">
-              <span>HTTP 并发（只影响批量评估）</span>
+              <span>HTTP 并发（只影响批量测试）</span>
               <input type="number" id="s-concurrency" min="2" max="128">
             </label>
             <label class="field">
-              <span>请求超时（秒，批量评估与对话请求共用）</span>
+              <span>请求超时（秒，批量测试与对话请求共用）</span>
               <input type="number" id="s-timeout" min="1" max="60" step="0.5">
             </label>
             <label class="field">
@@ -476,7 +476,7 @@
         <div class="panel full">
           <div class="panel-head"><span>使用边界</span><span class="hint">AUTHORIZED USE ONLY</span></div>
           <div class="notice">
-            本平台面向已获得书面授权的资产安全评估。所有评估作业都会记录授权依据、目标范围、操作人与时间。
+            本平台面向已获得书面授权的资产渗透测试。所有测试作业都会记录授权依据、目标范围、操作人与时间。
             请勿将平台用于未经授权的目标；对第三方 API 的调用需遵守对应厂商的服务条款与配额限制。
           </div>
         </div>
@@ -487,6 +487,6 @@
 
 <div id="modal-root"></div>
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=20261122c"></script>
+<script src="/static/app.js?v=20261124a"></script>
 </body>
 </html>

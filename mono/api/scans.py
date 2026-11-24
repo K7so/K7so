@@ -1,4 +1,4 @@
-"""安全评估：创建、列表、详情、实时日志、终止与导出。"""
+"""渗透测试作业：创建、列表、详情、实时日志、终止与导出。"""
 from __future__ import annotations
 
 import asyncio

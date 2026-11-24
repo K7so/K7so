@@ -1,4 +1,4 @@
-"""评估编排引擎：范围校验 -> 资产测绘 -> HTTP 配置核查 -> 端口探测 -> 模板检测 -> AI 研判。"""
+"""渗透测试编排引擎：范围校验 -> 资产测绘 -> HTTP 配置核查 -> 端口探测 -> 模板检测 -> AI 研判。"""
 from __future__ import annotations
 
 import asyncio
@@ -252,7 +252,7 @@ def summary_text(
     for key in ("critical", "high", "medium", "low", "info"):
         if severity_counts.get(key):
             parts.append(f"{labels[key]} {severity_counts[key]}")
-    base = "评估完成：" + "，".join(parts) + "。"
+    base = "测试完成：" + "，".join(parts) + "。"
     if ai_summary:
         return f"{ai_summary.strip()}\n\n[统计] {base}"
     return base + " 未启用 AI 研判，建议结合漏洞详情人工复核。"
@@ -284,15 +284,15 @@ async def ai_analyze(
     )[:25]
     lines = [f"- [{f['severity']}] {f['title']} | 目标: {f['target'][:120]}" for f in top]
     user_prompt = (
-        f"已授权评估目标：{', '.join(scan_targets[:10])}\n"
+        f"已授权测试目标：{', '.join(scan_targets[:10])}\n"
         f"风险统计：{json.dumps(stats.get('severity', {}), ensure_ascii=False)}\n"
         f"资产测绘来源：{json.dumps(stats.get('recon', {}).get('sources', {}), ensure_ascii=False)}\n"
         f"开放端口数量：{len(stats.get('ports', []))}\n"
         f"主要发现：\n" + ("\n".join(lines) if lines else "无")
     )
     system_prompt = (
-        "你是资深安全评估负责人，正在为已获得书面授权的安全评估项目撰写研判结论。"
-        "只依据给定的评估数据，不编造未验证的风险项，不提供任何攻击操作步骤。"
+        "你是资深渗透测试负责人，正在为已获得书面授权的渗透测试项目撰写研判结论。"
+        "只依据给定的测试数据，不编造未验证的风险项，不提供任何攻击操作步骤。"
         "请用中文输出 4 段纯文本：1) 总体风险判断；2) 最可能的攻击路径（基于已发现项）；"
         "3) 按优先级排列的修复清单；4) 复测建议。总字数不超过 500 字。"
     )
@@ -342,7 +342,7 @@ async def run_scan(scan_id: int) -> None:
         targets = list(dict.fromkeys([t.strip() for t in json.loads(scan["targets_json"]) if t.strip()]))
         targets = targets[:60]
         if not targets:
-            raise ValueError("没有可评估的目标")
+            raise ValueError("没有可测试的目标")
         stats["targets"] = targets
 
         logger.stage(4, "目标可用性检查")
