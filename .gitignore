@@ -1,0 +1,48 @@
+# ---------- 运行期数据（务必不要提交） ----------
+# data/ 下是真实业务数据与密钥：mono.db 存连接器 API Key（Fernet 加密），
+# .secret 就是解密它用的密钥 —— 两者一起进仓库等于明文泄露。
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+.secret
+
+# ---------- 本地环境 ----------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---------- 配置与密钥 ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+id_rsa*
+config.local.*
+settings.local.*
+
+# ---------- 日志、临时产物、打包件 ----------
+*.log
+logs/
+*.zip
+*.tar.gz
+*.tmp
+*.bak
+*.orig
+Thumbs.db
+.DS_Store
+
+# ---------- 编辑器 ----------
+.idea/
+.vscode/
+*.swp
+*~

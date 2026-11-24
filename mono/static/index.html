@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K7so // 智能安全工作台</title>
+<link rel="stylesheet" href="/static/style.css?v=20261122c">
+</head>
+<body>
+
+<div id="login-screen" class="login-screen">
+  <div class="login-card">
+    <div class="login-brand">K7so<span>//</span></div>
+    <div class="login-sub">AI SECURITY WORKSPACE</div>
+    <form id="login-form" autocomplete="off">
+      <label class="field">
+        <span>账号 / USER</span>
+        <input id="login-user" value="admin" autocomplete="username">
+      </label>
+      <label class="field">
+        <span>口令 / PASS</span>
+        <input id="login-pass" type="password" placeholder="首次启动见 data/初始口令.txt" autocomplete="current-password">
+      </label>
+      <button class="btn primary block" type="submit" id="login-btn">进入控制台</button>
+      <p id="login-error" class="login-error"></p>
+    </form>
+    <div class="login-foot">
+      <span>初始口令：data/初始口令.txt 或启动日志</span>
+      <span>仅限已授权资产的安全评估</span>
+    </div>
+  </div>
+  <div class="login-meta">K7so v1.0 · AUTHORIZED USE ONLY</div>
+</div>
+
+<div id="disclaimer-screen" class="login-screen hidden">
+  <div class="disclaimer-card">
+    <div class="disclaimer-tag">LEGAL NOTICE / 免责声明</div>
+    <h2>使用前请确认你已获得授权</h2>
+    <div class="disclaimer-body">
+      <p><strong>一、授权前提。</strong>本平台仅限用于已取得合法授权的资产安全评估。登录即表示你确认对被测目标拥有明示授权，平台以此作为后续全部操作（含安全评估、风险验证与结论归档）的授权依据，无需另行填写编号。</p>
+      <p><strong>二、合法使用。</strong>禁止将本平台用于未授权目标、他人系统或任何违反《网络安全法》《数据安全法》《刑法》等法律法规的用途。对境外目标还须遵守当地法律。</p>
+      <p><strong>三、操作留痕。</strong>登录、配置变更、评估调度、风险归档与 AI 工具调用均会写入审计日志，记录操作人、时间与来源地址，日志不可删除。</p>
+      <p><strong>四、风险自担。</strong>平台会尽量采用只读、无破坏性验证，但任何安全测试都存在不可预见风险。因使用本平台造成的业务中断、数据损失或法律责任，由操作者及其所属组织自行承担。</p>
+      <p><strong>五、数据处置。</strong>测试过程中获取的数据仅用于本次评估，不得外传、留存或用于其他目的；评估结束后应按约定销毁。</p>
+    </div>
+    <div class="disclaimer-actions">
+      <button class="btn ghost" type="button" id="disclaimer-decline">不同意，退出登录</button>
+      <button class="btn primary" type="button" id="disclaimer-accept">知晓并同意</button>
+    </div>
+    <div class="disclaimer-foot">点击「知晓并同意」表示你已阅读、理解并接受上述全部条款。</div>
+  </div>
+</div>
+
+<div id="app" class="app hidden">
+  <aside class="sidebar">
+    <div class="side-brand">
+      <div class="logo">K7so<span>//</span></div>
+      <div class="logo-sub">AI SECURITY WORKSPACE</div>
+    </div>
+    <nav class="side-nav">
+      <button class="nav-item active" data-page="dashboard"><span class="idx">01</span><span class="nav-label">仪表盘</span></button>
+      <button class="nav-item" data-page="chat"><span class="idx">AI</span><span class="nav-label">智能工作</span></button>
+      <button class="nav-item" data-page="assets"><span class="idx">02</span><span class="nav-label">资产监管</span></button>
+      <button class="nav-item" data-page="kits"><span class="idx">03</span><span class="nav-label">K7so工具</span></button>
+      <button class="nav-item" data-page="findings"><span class="idx">04</span><span class="nav-label">漏洞结果</span></button>
+      <button class="nav-item" data-page="connectors"><span class="idx">05</span><span class="nav-label">API 中心</span></button>
+      <button class="nav-item" data-page="paths"><span class="idx">06</span><span class="nav-label">目录配置</span></button>
+      <button class="nav-item" data-page="capabilities"><span class="idx">07</span><span class="nav-label">模型能力</span></button>
+      <button class="nav-item" data-page="audit"><span class="idx">08</span><span class="nav-label">审计日志</span></button>
+      <button class="nav-item" data-page="settings"><span class="idx">09</span><span class="nav-label">平台设置</span></button>
+    </nav>
+    <div class="side-foot">
+      <div class="side-user">
+        <span class="dot"></span>
+        <div><strong id="side-user">admin</strong><small>已认证操作员</small></div>
+      </div>
+      <button id="logout-btn" class="btn ghost small block">退出登录</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="crumb">
+        <span id="page-title">仪表盘</span>
+        <span class="crumb-sub">/ 已授权目标自动化评估</span>
+      </div>
+      <div class="top-right">
+        <span id="clock" class="clock"></span>
+        <span class="pill"><span class="dot"></span>ONLINE</span>
+      </div>
+    </header>
+
+    <!-- 01 仪表盘 -->
+    <section class="page" id="page-dashboard">
+      <div class="page-head">
+        <div>
+          <h1>态势总览</h1>
+          <p>资产、评估作业、风险与能力接入的实时视图。</p>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="dash-new-scan">新建评估</button>
+          <button class="btn" id="dash-refresh">刷新</button>
+        </div>
+      </div>
+      <div class="stat-grid" id="dash-stats"></div>
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><span>7 日作业趋势</span><span class="hint">RUNS / FINDINGS</span></div>
+          <div class="trend-chart" id="dash-trend"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>风险分布</span><span class="hint">OPEN FINDINGS</span></div>
+          <div class="severity-chart" id="dash-severity"></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><span>最近作业</span><button class="link" data-goto="scans">全部 →</button></div>
+          <div class="table-wrap slim" id="dash-scans"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>最新风险</span><button class="link" data-goto="findings">全部 →</button></div>
+          <div class="table-wrap slim" id="dash-findings"></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-head"><span>连接器健康度</span><button class="link" data-goto="connectors">配置 →</button></div>
+          <div class="connector-health" id="dash-connectors"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>最近操作</span><span class="hint">AUDIT</span></div>
+          <div class="timeline" id="dash-activity"></div>
+        </div>
+      </div>
+      <div class="panel scope-banner" id="dash-scope"></div>
+    </section>
+
+    <!-- 智能工作 -->
+    <section class="page hidden" id="page-chat">
+      <div class="chat-layout">
+        <aside class="panel chat-sessions">
+          <div class="panel-head">
+            <span>会话记录</span>
+            <span class="hint">HISTORY</span>
+          </div>
+          <div id="chat-session-list" class="chat-session-list"></div>
+          <!-- 会话记录下方：自动继续与停止生成同行，其余设置折在下面两行 -->
+          <div class="auto-bar" id="auto-bar">
+            <div class="auto-row">
+              <label class="auto-toggle" title="每轮跑完，平台把下面这句话原样发出去，让模型接着干">
+                <input type="checkbox" id="auto-continue">
+                <span>自动继续</span>
+              </label>
+              <button class="btn ghost small hidden" id="chat-stop" type="button">停止生成</button>
+            </div>
+            <label class="auto-field">
+              <span>预设提示词</span>
+              <input class="input auto-text" id="auto-text" maxlength="200" placeholder="继续" value="继续">
+            </label>
+            <div class="auto-foot">
+              <span class="hint auto-hint" id="auto-hint">跑完一轮就替你发一句 · 不限次数</span>
+              <button class="btn ghost small hidden" id="auto-stop" type="button">停止自动</button>
+            </div>
+          </div>
+        </aside>
+        <div class="panel chat-main">
+          <div class="panel-head">
+            <div class="chat-head-title">
+              <span id="chat-title">新会话</span>
+              <span class="cov-chip hidden" id="cov-chip" title="能力覆盖台账：勾选的测试能力验了几项"></span>
+            </div>
+            <div class="actions">
+              <select class="input" id="chat-provider"></select>
+              <button class="btn ghost small" id="chat-copy-all">复制对话</button>
+              <button class="btn ghost small" id="chat-new">新会话</button>
+            </div>
+          </div>
+          <div class="chat-stream" id="chat-stream">
+            <div id="chat-messages" class="chat-messages">
+              <div class="chat-empty">
+                <div class="chat-empty-title">智能工作 · SMART WORK</div>
+                <p>给它一个域名或 IP，默认就开始找漏洞。</p>
+                <p class="chat-empty-foot">资产测绘 → 能力测试 → 逐条归档请求包与响应包。过程我来处理，只在需要你决策时给选项。</p>
+              </div>
+            </div>
+            <!-- 本会话提问：贴在对话区右缘的点列，鼠标移上去弹面板列出全部提问 -->
+            <aside class="chat-outline" id="chat-outline" aria-label="本会话提问">
+              <div class="chat-outline-head" id="chat-outline-count" title="本会话提问">0</div>
+              <div id="chat-outline-list" class="chat-outline-list">
+                <p class="chat-outline-empty">暂无提问</p>
+              </div>
+            </aside>
+            <div class="chat-outline-panel hidden" id="chat-outline-panel">
+              <div class="outline-panel-head">
+                <span>本会话提问</span>
+                <span class="hint" id="chat-outline-panel-count">0 条</span>
+              </div>
+              <div class="outline-panel-list" id="chat-outline-panel-list"></div>
+            </div>
+          </div>
+          <form id="chat-form" class="chat-composer">
+            <div class="chat-compose-row">
+              <textarea id="chat-input" rows="2" placeholder="说清你要的结果，例如：把这批资产过一遍，列出必须先修的风险"></textarea>
+              <button class="btn primary chat-send" id="chat-send" type="submit">发送</button>
+            </div>
+            <span class="hint chat-compose-hint" id="chat-compose-hint">Enter 发送 · Shift+Enter 换行</span>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 资产监管 -->
+    <section class="page hidden" id="page-assets">
+      <div class="page-head">
+        <div><h1>资产监管</h1></div>
+        <div class="actions">
+          <button class="btn" id="asset-compare">对比两个模块</button>
+          <button class="btn primary" id="asset-module-new">新建模块</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span>资产模块</span><span class="hint" id="asset-module-hint">—</span></div>
+        <div class="table-wrap" id="asset-module-table"></div>
+      </div>
+    </section>
+
+    <!-- 03 K7so工具 -->
+    <section class="page hidden" id="page-kits">
+      <div class="page-head">
+        <div><h1>K7so工具</h1><p>Python 脚本、EXE、JAR、Go 程序直接丢进来，落在这个平台的本地工具目录里，点一下就开始跑，输出就在下面。</p></div>
+        <div class="actions">
+          <select class="input" id="kit-kind" style="width:150px">
+            <option value="">按扩展名识别</option>
+            <option value="python">Python 脚本</option>
+            <option value="exe">Windows 程序</option>
+            <option value="jar">Java 包</option>
+            <option value="go">Go 程序</option>
+          </select>
+          <input type="file" id="kit-file" class="hidden" multiple>
+          <button class="btn primary" id="kit-upload">导入工具</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span>已导入工具</span><span class="hint" id="kit-hint">—</span></div>
+        <div id="kit-grid" class="kit-grid"></div>
+      </div>
+      <div class="panel hidden" id="kit-output-panel">
+        <div class="panel-head">
+          <span id="kit-output-title">运行输出</span>
+          <div class="actions">
+            <span class="hint" id="kit-output-status"></span>
+            <button class="btn ghost small hidden" id="kit-stop">停止</button>
+          </div>
+        </div>
+        <pre class="kit-output" id="kit-output"></pre>
+      </div>
+    </section>
+
+    <!-- 04 漏洞 -->
+    <section class="page hidden" id="page-findings">
+      <div class="page-head">
+        <div><h1>漏洞结果</h1><p>以域名为单位统计：一个站点一行，先看这家的漏洞条数与等级分布；模型确认一条就在对话里实时出现，点任意一条展开 URL、请求包、响应包与文字解释。泄露类只收录「正常用户看不到」的信息——页面上本来就公开的不算。</p></div>
+        <div class="actions">
+          <select class="input" id="finding-severity">
+            <option value="">全部等级</option>
+            <option value="critical">严重</option>
+            <option value="high">高危</option>
+            <option value="medium">中危</option>
+            <option value="low">低危</option>
+            <option value="info">信息</option>
+          </select>
+          <input class="input" id="finding-search" placeholder="搜索 URL / 标题 / 证据">
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span id="finding-count">共 0 条漏洞</span><span class="hint">GROUPED BY DOMAIN</span></div>
+        <div class="table-wrap" id="finding-table"></div>
+      </div>
+    </section>
+
+    <!-- 05 API 中心 -->
+    <section class="page hidden" id="page-connectors">
+      <div class="page-head">
+        <div><h1>API 中心</h1><p>选择大模型类型（目录里没有的选「自定义模型」自己填地址），填写 Key、模型名称与 Base URL 即可接入并对话。</p></div>
+        <div class="actions"><span class="pill" id="connector-summary">0 个大模型可用</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><span>大模型接入</span><span class="hint">LLM PROVIDER</span></div>
+        <div class="llm-form">
+          <label class="field">
+            <span>大模型类型</span>
+            <select id="llm-type"></select>
+          </label>
+          <label class="field" id="llm-label-field" hidden>
+            <span>显示名称（可选）</span>
+            <input id="llm-label" placeholder="我的私有模型">
+          </label>
+          <label class="field">
+            <span>大模型名称</span>
+            <input id="llm-model" placeholder="deepseek-chat">
+          </label>
+          <label class="field full">
+            <span>大模型 Base URL</span>
+            <input id="llm-base" placeholder="https://api.deepseek.com">
+          </label>
+          <label class="field full">
+            <span>大模型 KEY</span>
+            <input id="llm-key" autocomplete="off" placeholder="请输入 API Key">
+          </label>
+        </div>
+        <div class="llm-form-actions">
+          <span class="hint" id="llm-status">未配置</span>
+          <div class="actions">
+            <button class="btn ghost" id="llm-test">检测</button>
+            <button class="btn primary" id="llm-save">保存</button>
+          </div>
+        </div>
+        <div class="notice">密钥使用 Fernet 加密存储，页面仅显示掩码；保存后大模型会出现在下方列表并可用于对话。</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><span>已接入的大模型</span><span class="hint">CONFIGURED MODELS</span></div>
+        <div class="table-wrap" id="llm-list"></div>
+      </div>
+
+      <details class="adv-panel">
+        <summary>其他引擎连接器 · 资产测绘 / 威胁情报 / 漏洞平台 / 本地工具</summary>
+        <div id="connector-groups"></div>
+      </details>
+    </section>
+
+    <!-- 06 目录配置 -->
+    <section class="page hidden" id="page-paths">
+      <div class="page-head">
+        <div><h1>目录配置</h1><p>设置 AI 的用户级记忆目录与默认工作目录。记忆会在每次执行任务前注入上下文，AI 也能直接打开目录内的文件来查证。</p></div>
+        <div class="actions"><button class="btn primary" id="paths-save">保存配置</button></div>
+      </div>
+      <div class="settings-grid">
+        <div class="panel">
+          <div class="panel-head"><span>用户级记忆</span><span class="hint">MEMORY</span></div>
+          <div class="form-grid">
+            <label class="field">
+              <span>记忆目录（文件或目录，读 .md / .txt / .json / .yaml）</span>
+              <input id="d-memory-path" placeholder="留空使用平台默认目录 data\memory">
+            </label>
+            <div class="hint" id="d-memory-status">未设置</div>
+            <div class="notice">AI 可以直接打开该目录下的文件（read_file / read_memory），执行任务前也会把内容预载为上下文。目录不存在时保存会自动创建。</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>工作目录</span><span class="hint">WORKSPACE</span></div>
+          <div class="form-grid">
+            <label class="field">
+              <span>AI 默认工作目录</span>
+              <input id="d-work-dir" placeholder="留空使用平台默认目录 data\workspace">
+            </label>
+            <div class="hint" id="d-work-status">未设置</div>
+            <div class="notice">AI 的写文件操作被限制在该目录内；读取可同时访问记忆目录。两者之外的路径一律拒绝。</div>
+          </div>
+        </div>
+        <div class="panel full">
+          <div class="panel-head"><span>记忆预览</span><span class="hint">PREVIEW</span></div>
+          <pre class="summary-box" id="d-memory-preview">未读取到记忆内容</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 07 模型能力 -->
+    <section class="page hidden" id="page-capabilities">
+      <div class="page-head">
+        <div><h1>模型能力</h1><p>勾选大模型可以执行的测试能力，用右侧滑块给每一项设 1-5 的权重（默认 5），还可以给每一项写「用户提示」——模型测这一项之前必须先读完、照着做，不照做就不算测过。「自动渗透」默认关闭：关着只测勾选并启用的类型，打开后清单外的漏洞类型也会按目标暴露面一起测。AI 先分析目标前端代码，再按权重从高到低安排测试顺序，直到每一项都有结论才算测完。</p></div>
+        <div class="actions"><span class="pill" id="capability-count">已启用 0 项</span></div>
+      </div>
+
+      <div id="switch-cards" class="switch-stack"></div>
+
+      <div class="panel">
+        <div class="panel-head"><span>测试能力</span><span class="hint" id="capability-hint">64 项 · 7 组</span></div>
+        <div class="capability-toolbar">
+          <input class="input" id="capability-search" placeholder="搜索能力名称 / 关键字，例如：注入、越权、SSRF">
+          <div class="actions">
+            <button class="btn ghost small" id="capability-all">全选</button>
+            <button class="btn ghost small" id="capability-none">清空</button>
+          </div>
+        </div>
+        <div class="capability-legend">
+          <span>每项最右边的<strong>滑块</strong>是测试权重：1-5，越大越先测。</span>
+          <span><strong>用户提示</strong>：写清这一项必须怎么测（点名的接口、要换的账号、不要碰的东西），模型开测前必须读完照做。</span>
+          <span class="muted">同类漏洞已合并：SQL 注入各手法、IDOR 与水平越权、文件读取与路径穿越等各算一项。</span>
+        </div>
+        <div id="capability-groups" class="capability-groups"></div>
+        <div class="llm-form-actions">
+          <span class="hint" id="capability-status">未启用任何测试能力</span>
+          <div class="actions"><button class="btn primary" id="capability-save">保存能力配置</button></div>
+        </div>
+        <div class="notice">能力开关、权重、用户提示与操作询问会实时注入 AI 对话上下文；对话中模型归档的漏洞会写入「漏洞结果」，并保留漏洞 URL、请求包与响应包。</div>
+      </div>
+    </section>
+
+    <!-- 07 审计 -->
+    <section class="page hidden" id="page-audit">
+      <div class="page-head">
+        <div><h1>审计日志</h1><p>登录、资产变更、评估调度、能力接入与报告生成的全量留痕。</p></div>
+        <div class="actions">
+          <input class="input" id="audit-search" placeholder="搜索操作人 / 动作 / 详情">
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span id="audit-total">共 0 条</span><span class="hint">APPEND ONLY</span></div>
+        <div class="table-wrap" id="audit-table"></div>
+      </div>
+    </section>
+
+    <!-- 09 设置 -->
+    <section class="page hidden" id="page-settings">
+      <div class="page-head">
+        <div><h1>平台设置</h1><p>安全开关与评估性能参数。修改后立即生效。</p></div>
+        <div class="actions"><button class="btn primary" id="settings-save">保存设置</button></div>
+      </div>
+      <div class="settings-grid">
+        <div class="panel">
+          <div class="panel-head"><span>授权状态</span><span class="hint">AUTHORIZATION</span></div>
+          <div class="form-grid">
+            <div class="auth-state">
+              <span class="auth-badge">已授权</span>
+              <strong>登录免责声明即操作授权</strong>
+            </div>
+            <div class="notice">
+              不再需要填写授权域名或网段：你在登录时点过「知晓并同意」，就表示被测试的目标都已获得授权，
+              平台不会再为「这个域名在不在范围内」逐条询问。评估目标以你在对话里点名、或在资产台账里登记的内容为准，
+              每次发包与评估仍会写入审计日志。
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>评估策略</span><span class="hint">ENGINE</span></div>
+          <div class="form-grid">
+            <label class="switch-row">
+              <span>安全模式（批量评估排除 DoS / 爆破；对话里改动数据的方法会先确认）</span>
+              <input type="checkbox" id="s-safe-mode">
+            </label>
+            <label class="switch-row">
+              <span>敏感路径探测（批量评估扫 .env / .git；关掉后对话读本机凭据不再确认）</span>
+              <input type="checkbox" id="s-sensitive-paths">
+            </label>
+            <label class="switch-row">
+              <span>启用 AI 研判（只影响批量评估，不关对话）</span>
+              <input type="checkbox" id="s-ai-enabled">
+            </label>
+            <label class="field">
+              <span>HTTP 并发（只影响批量评估）</span>
+              <input type="number" id="s-concurrency" min="2" max="128">
+            </label>
+            <label class="field">
+              <span>请求超时（秒，批量评估与对话请求共用）</span>
+              <input type="number" id="s-timeout" min="1" max="60" step="0.5">
+            </label>
+            <label class="field">
+              <span>User-Agent</span>
+              <input type="text" id="s-user-agent">
+            </label>
+          </div>
+        </div>
+        <div class="panel full">
+          <div class="panel-head"><span>账号安全</span><span class="hint">CREDENTIALS</span></div>
+          <div class="form-grid">
+            <div class="grid-2" style="gap:12px">
+              <label class="field"><span>当前口令</span><input type="password" id="p-old" autocomplete="current-password"></label>
+              <label class="field"><span>新口令（至少 8 位）</span><input type="password" id="p-new" autocomplete="new-password"></label>
+            </div>
+            <div><button class="btn" id="password-save">更新登录口令</button></div>
+          </div>
+        </div>
+        <div class="panel full">
+          <div class="panel-head"><span>使用边界</span><span class="hint">AUTHORIZED USE ONLY</span></div>
+          <div class="notice">
+            本平台面向已获得书面授权的资产安全评估。所有评估作业都会记录授权依据、目标范围、操作人与时间。
+            请勿将平台用于未经授权的目标；对第三方 API 的调用需遵守对应厂商的服务条款与配额限制。
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast" class="toast"></div>
+<script src="/static/app.js?v=20261122c"></script>
+</body>
+</html>
