@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>K7so // Agent 自动化渗透测试平台</title>
-<link rel="stylesheet" href="/static/style.css?v=20261126a">
+<link rel="stylesheet" href="/static/style.css?v=20261126d">
 </head>
 <body>
 
@@ -29,7 +29,7 @@
       <span>仅限已授权资产的渗透测试</span>
     </div>
   </div>
-  <div class="login-meta">K7so v3.6.0 · AUTHORIZED USE ONLY</div>
+  <div class="login-meta">K7so v3.6.1 · AUTHORIZED USE ONLY</div>
 </div>
 
 <div id="disclaimer-screen" class="login-screen hidden">
@@ -153,14 +153,14 @@
             </label>
             <button class="btn ghost small" id="duo-save-dir" type="button">保存目录</button>
             <button class="btn ghost small" id="duo-stop" type="button">全部停止</button>
-            <button class="btn primary small" id="duo-new" type="button">新建协同</button>
+            <button class="btn primary small" id="duo-new" type="button">新开一组</button>
           </div>
         </header>
         <div class="duo-body" id="duo-body">
           <section class="duo-lane" data-lane="a">
             <div class="duo-lane-head">
               <select class="input duo-model" id="duo-a-model" aria-label="左栏模型"></select>
-              <span class="duo-state" id="duo-a-state">空闲</span>
+              <span class="duo-state" id="duo-a-state">选模型</span>
             </div>
             <div class="chat-stream duo-stream" id="duo-a-stream">
               <div class="chat-messages" id="duo-a-messages"></div>
@@ -189,7 +189,7 @@
           <section class="duo-lane" data-lane="b">
             <div class="duo-lane-head">
               <select class="input duo-model" id="duo-b-model" aria-label="右栏模型"></select>
-              <span class="duo-state" id="duo-b-state">空闲</span>
+              <span class="duo-state" id="duo-b-state">选模型</span>
             </div>
             <div class="chat-stream duo-stream" id="duo-b-stream">
               <div class="chat-messages" id="duo-b-messages"></div>
@@ -201,13 +201,6 @@
           </section>
 
 
-        </div>
-        <div class="duo-blank" id="duo-blank">
-          <div class="duo-blank-inner">
-            <div class="duo-blank-title">两个模型，一个目标</div>
-            <p>左边和右边各选一个大模型，配一个共享目录，然后一起交代任务。它们会各自动手，需要对方配合时互相留言。</p>
-            <p class="hint">现在还没有协同会话，点右上角「新建协同」开始。</p>
-          </div>
         </div>
       </div>
 
@@ -286,7 +279,7 @@
     
 
       <!-- 历史记录：协同会话与单模型会话都在这里 -->
-      <aside class="history-drawer" id="history-drawer">
+      <aside class="history-drawer hidden" id="history-drawer">
         <div class="history-head">
           <span>历史记录</span>
           <button class="btn ghost small" id="history-close" type="button">关闭</button>
@@ -572,7 +565,7 @@
 
 <div id="modal-root"></div>
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=20261126a"></script>
-<script src="/static/duo.js?v=20261126a"></script>
+<script src="/static/app.js?v=20261126d"></script>
+<script src="/static/duo.js?v=20261126d"></script>
 </body>
 </html>

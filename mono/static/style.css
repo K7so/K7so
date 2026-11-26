@@ -94,14 +94,14 @@ body::before {
 }
 
 /* ---------- layout ---------- */
-.app { display: grid; grid-template-columns: 208px minmax(0, 1fr); min-height: 100vh; position: relative; z-index: 1; }
+.app { display: grid; grid-template-columns: 184px minmax(0, 1fr); min-height: 100vh; position: relative; z-index: 1; }
 .sidebar {
   border-right: 1px solid var(--line);
   background: rgba(5,10,15,.94);
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; z-index: 20;
 }
-.side-brand { padding: 22px 16px 18px; border-bottom: 1px solid var(--line); }
+.side-brand { padding: 20px 13px 16px; border-bottom: 1px solid var(--line); }
 .logo { font-family: var(--mono); font-size: 23px; font-weight: 700; letter-spacing: .14em; }
 .logo span { color: var(--accent); }
 .logo-sub { color: var(--dim); font-family: var(--mono); font-size: 9px; letter-spacing: .3em; margin-top: 4px; }
@@ -121,7 +121,7 @@ body::before {
   background: linear-gradient(90deg, rgba(53,214,240,.15), rgba(53,214,240,.02));
 }
 .nav-item.active .idx { color: var(--accent); }
-.side-foot { border-top: 1px solid var(--line); padding: 16px 20px 20px; display: grid; gap: 12px; }
+.side-foot { border-top: 1px solid var(--line); padding: 14px 13px 18px; display: grid; gap: 12px; }
 .side-user { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; }
 .side-user small { display: block; color: var(--dim); font-size: 9px; letter-spacing: .1em; }
 .side-user strong { font-weight: 500; color: var(--text); }
@@ -503,11 +503,12 @@ input.cap-slider:focus-visible { box-shadow: 0 0 0 3px rgba(53,214,240,.28); bor
 #page-chat { max-width: none; }
 /* 整页铺满窗口：左列与左侧目录同宽（244），右侧对话区吃满剩余宽度；
    提问点列贴在对话区右缘（见 .chat-stream / .chat-outline） */
-body.chat-page .main { padding: 0 22px 12px; }
-body.chat-page .topbar { margin-bottom: 14px; }
+body.chat-page .main { padding: 10px 22px 12px; }
+/* 对话页不要顶栏：标题已经在协同工具栏里，这一行的高度全让给对话 */
+body.chat-page .topbar { display: none; }
 #page-chat .chat-layout {
   display: grid; grid-template-columns: 244px minmax(0, 1fr); gap: 12px;
-  height: calc(100vh - 88px); min-height: 0;
+  height: calc(100vh - 34px); min-height: 0;
 }
 #page-chat .panel {
   margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 0;
@@ -966,26 +967,26 @@ body.chat-page .topbar { margin-bottom: 14px; }
 /* ============================================================
    字号放大：全局统一上调，正文 17px，表格 15px
    ============================================================ */
-body { font-size: 17px; }
+body { font-size: 16px; }
 .link { font-size: 14px; }
 .login-sub { font-size: 12px; }
 .login-error { font-size: 13px; }
 .login-foot { font-size: 12.5px; }
 .login-meta { font-size: 12px; }
 .logo-sub { font-size: 11.5px; }
-.nav-item { font-size: 16px; padding: 13px 24px; }
-.nav-item .idx { font-size: 12px; }
+.nav-item { font-size: 15px; padding: 12px 14px; gap: 8px; }
+.nav-item .idx { font-size: 11px; }
 .side-user { font-size: 13px; }
 .side-user small { font-size: 11px; }
 .crumb { font-size: 13px; }
 .crumb span:first-child { font-size: 16px; }
 .clock { font-size: 13px; }
 .pill { font-size: 11.5px; }
-.page-head h1 { font-size: 29px; }
+.page-head h1 { font-size: 27px; }
 .page-head p { font-size: 15px; }
-.btn { font-size: 14px; }
+.btn { font-size: 13px; }
 .btn.small { font-size: 13px; }
-.input, textarea, select, input:not([type="checkbox"]) { font-size: 15px; }
+.input, textarea, select, input:not([type="checkbox"]) { font-size: 14px; }
 .field > span { font-size: 13px; }
 .switch-row span { font-size: 15px; }
 .panel-head > span:first-child { font-size: 15px; }
@@ -1018,10 +1019,10 @@ td.mono-cell, td .mono { font-size: 14px; }
 .adv-panel summary { font-size: 12.5px; }
 .chat-session-item strong { font-size: 15px; }
 .chat-session-item small { font-size: 11.5px; }
-.chat-empty-title { font-size: 26px; }
+.chat-empty-title { font-size: 24px; }
 .chat-empty p { font-size: 15px; }
 .chat-role { font-size: 12px; }
-.chat-bubble { font-size: 18px; }
+.chat-bubble { font-size: 17px; }
 .chat-tool summary { font-size: 13.5px; }
 .chat-tool-body label { font-size: 11.5px; }
 .chat-tool-body pre { font-size: 13px; }
@@ -1454,7 +1455,7 @@ td.mono-cell, td .mono { font-size: 14px; }
    ============================================================ */
 #page-chat .duo-shell {
   display: flex; flex-direction: column; gap: 10px;
-  height: calc(100vh - 88px); min-height: 0;
+  height: calc(100vh - 34px); min-height: 0;
 }
 .duo-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -1475,7 +1476,7 @@ td.mono-cell, td .mono { font-size: 14px; }
 
 .duo-body {
   flex: 1; min-height: 0; display: grid;
-  grid-template-columns: minmax(0, 1fr) 318px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 192px minmax(0, 1fr);
   gap: 10px;
 }
 .duo-lane {
@@ -1542,14 +1543,6 @@ td.mono-cell, td .mono { font-size: 14px; }
   font-family: var(--sans); font-size: 12.5px; background: #08131d; min-width: 120px;
 }
 
-.duo-blank { flex: 1; display: flex; align-items: center; justify-content: center; }
-.duo-blank-inner { max-width: 560px; text-align: center; padding: 24px; }
-.duo-blank-title {
-  font-family: var(--mono); font-size: 20px; letter-spacing: .04em;
-  color: var(--text); margin-bottom: 14px;
-}
-.duo-blank-inner p { color: var(--muted); font-size: 13.5px; line-height: 1.8; margin: 0 0 8px; }
-
 /* 历史抽屉：从右侧滑出，盖在对话区上 */
 .history-drawer {
   position: fixed; top: 0; right: 0; bottom: 0; width: min(380px, 92vw);
@@ -1591,14 +1584,14 @@ td.mono-cell, td .mono { font-size: 14px; }
 .history-main small { font-family: var(--mono); font-size: 10.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 1280px) {
-  .duo-body { grid-template-columns: minmax(0, 1fr) 268px minmax(0, 1fr); }
+  .duo-body { grid-template-columns: minmax(0, 1fr) 176px minmax(0, 1fr); }
   .duo-dir .input { width: min(220px, 24vw); }
 }
 @media (max-width: 1000px) {
   #page-chat .duo-shell { height: auto; }
-  .duo-body { grid-template-columns: 1fr; }
+  .duo-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .duo-lane { min-height: 52vh; }
-  .duo-peer { min-height: 240px; }
+  .duo-peer { grid-column: 1 / -1; min-height: 220px; order: 3; }
   .duo-dir .input { width: 100%; }
 }
 
@@ -1606,7 +1599,7 @@ td.mono-cell, td .mono { font-size: 14px; }
 .duo-files {
   display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
   padding: 7px 10px; border-bottom: 1px solid var(--line);
-  background: rgba(6,11,17,.7); max-height: 64px; overflow: hidden;
+  background: rgba(6,11,17,.7); max-height: 76px; overflow-y: auto;
 }
 .duo-files-empty { font-size: 11.5px; color: var(--dim); }
 .duo-file {

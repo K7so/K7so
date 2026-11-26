@@ -48,7 +48,7 @@ function duoSetState(key) {
   const chip = document.getElementById(`duo-${key}-state`);
   if (!chip || !lane) return;
   if (!lane.sessionId) {
-    chip.textContent = "未开始";
+    chip.textContent = DUO.pair ? "待开工" : "选好就能开始";
     chip.className = "duo-state";
     return;
   }
@@ -56,12 +56,47 @@ function duoSetState(key) {
   chip.className = `duo-state${lane.running ? " on" : ""}`;
 }
 
-function duoBlank(show) {
-  const blank = document.getElementById("duo-blank");
-  const body = document.getElementById("duo-body");
-  if (!blank || !body) return;
-  blank.classList.toggle("hidden", !show);
-  body.classList.toggle("hidden", !!show);
+/* 模型下拉：选项来自 API 中心已经配好并检测通过的那些 */
+function duoReadyProviders() {
+  return state.chatProviders || [];
+}
+
+function duoStoredModel(key) {
+  try { return localStorage.getItem(`duo.model.${key}`) || ""; } catch (error) { return ""; }
+}
+
+function duoStoreModel(key, value) {
+  try { localStorage.setItem(`duo.model.${key}`, value || ""); } catch (error) { /* 隐身模式存不了，不影响用 */ }
+}
+
+function duoStoredDir() {
+  try { return localStorage.getItem("duo.workdir") || ""; } catch (error) { return ""; }
+}
+
+function duoStoreDir(value) {
+  try { localStorage.setItem("duo.workdir", value || ""); } catch (error) { /* 同上 */ }
+}
+
+function duoFillModels() {
+  const providers = duoReadyProviders();
+  const keys = providers.map((item) => item.key);
+  const fallback = [keys[0] || "", keys[1] || keys[0] || ""];
+  ["a", "b"].forEach((key, index) => {
+    const select = document.getElementById(`duo-${key}-model`);
+    if (!select) return;
+    const stored = duoStoredModel(key);
+    const want = keys.includes(stored) ? stored : fallback[index];
+    select.innerHTML = providers.length
+      ? providers.map((item) => `<option value="${esc(item.key)}">${esc(item.name)}${item.model ? ` · ${esc(item.model)}` : ""}</option>`).join("")
+      : `<option value="">还没有可用的模型</option>`;
+    select.disabled = !providers.length;
+    if (want) select.value = want;
+    const lane = DUO.lanes[key];
+    if (lane) {
+      lane.provider = select.value;
+      lane.modelName = select.selectedOptions[0]?.textContent || select.value;
+    }
+  });
 }
 
 function duoFromDetail(detail) {
@@ -125,7 +160,9 @@ function duoRender(key, anchor) {
   const box = duoEl(key);
   if (!lane || !box) return;
   if (!lane.sessionId) {
-    box.innerHTML = "";
+    box.innerHTML = duoReadyProviders().length
+      ? `<div class="chat-empty duo-empty"><p>${esc(lane.modelName || "这一栏")} 已就位。写一句话就开始，两栏各跑各的，中间会显示它们互相说了什么。</p></div>`
+      : `<div class="chat-empty duo-empty"><p>还没有可用的模型。去「API 中心」填一个大模型的密钥并点一次检测，回来这里就能选。</p></div>`;
     return;
   }
   const messages = lane.messages || [];
@@ -448,11 +485,59 @@ async function duoReload(key, quiet) {
   else duoRender(key, "");
 }
 
+/* 草稿态：还没建配对，但界面照样是两栏，选好模型写一句话就自动建 */
+function duoDraft() {
+  DUO.pair = null;
+  DUO.notes = [];
+  DUO.lastNote = 0;
+  const title = document.getElementById("duo-title");
+  if (title) title.textContent = "双模型协同";
+  document.getElementById("duo-budget")?.classList.add("hidden");
+  duoFillModels();
+  ["a", "b"].forEach((key) => {
+    const lane = duoLaneNew(key);
+    const select = document.getElementById(`duo-${key}-model`);
+    lane.provider = select ? select.value : "";
+    lane.modelName = select?.selectedOptions[0]?.textContent || "";
+    DUO.lanes[key] = lane;
+    duoSetState(key);
+    duoRender(key, "");
+  });
+  const dir = document.getElementById("duo-workdir");
+  if (dir) dir.value = duoStoredDir();
+  duoRenderNotes([]);
+  duoRenderFiles([]);
+}
+
+/* 第一次下发时把配对建出来：左右模型就按界面上选的来，不用先进弹窗 */
+async function duoEnsurePair(text) {
+  if (DUO.pair) return DUO.pair;
+  if (!duoReadyProviders().length) {
+    throw new Error("还没有可用的模型：去「API 中心」填一个密钥并检测一下");
+  }
+  const a = document.getElementById("duo-a-model")?.value || "";
+  const b = document.getElementById("duo-b-model")?.value || "";
+  if (!a || !b) throw new Error("左右两栏都要选一个模型");
+  const dir = document.getElementById("duo-workdir")?.value.trim() || "";
+  const pair = await api("/api/chat/pairs", {
+    method: "POST",
+    body: { title: String(text || "").slice(0, 24), provider_a: a, provider_b: b, workdir: dir },
+  });
+  await duoOpenPair(pair.id);
+  return DUO.pair;
+}
+
 async function duoSay(keys, text) {
-  const pair = DUO.pair;
   const content = String(text || "").trim();
-  if (!pair) { toast("先点「新建协同」建一个协同会话", "error"); return; }
   if (!content) return;
+  try {
+    await duoEnsurePair(content);
+  } catch (error) {
+    toast(error.message, "error");
+    return;
+  }
+  const pair = DUO.pair;
+  if (!pair) return;
   const lane = keys.length === 2 ? "both" : keys[0];
   const res = await api(`/api/chat/pairs/${pair.id}/say`, {
     method: "POST",
@@ -539,7 +624,7 @@ function duoRenderFiles(files) {
   if (!box) return;
   const list = files || [];
   if (!list.length) {
-    box.innerHTML = `<span class="duo-files-empty">协同目录还是空的：模型写出文件后会自动出现在这里</span>`;
+    box.innerHTML = `<span class="duo-files-empty">目录还是空的，模型写出文件后会出现在这里</span>`;
     return;
   }
   box.innerHTML = list.slice(0, 10).map((item) => (
@@ -668,15 +753,16 @@ async function duoOpenPair(pairId) {
   DUO.notes = data.notes || [];
   DUO.lastNote = DUO.notes.length ? Number(DUO.notes[DUO.notes.length - 1].id) : 0;
   duoShowDuo();
-  duoBlank(false);
   document.getElementById("duo-title").textContent = data.pair.title || "双模型协同";
   document.getElementById("duo-workdir").value = data.pair.workdir || "";
+  duoFillModels();
   duoBudget(data.budget);
   ["a", "b"].forEach((key) => {
     const lane = duoLaneNew(key);
     const detail = (data.lanes && data.lanes[key]) || {};
     lane.sessionId = Number(detail.id || 0);
-    lane.provider = String(detail.provider || (key === "a" ? data.pair.model_a : data.pair.model_b) || "");
+    // 这一栏用哪个模型，以配对记录为准：建的时候选的、后来换的，都在这里
+    lane.provider = String((key === "a" ? data.pair.model_a : data.pair.model_b) || detail.provider || "");
     lane.modelName = (data.names && data.names[key]) || lane.provider || key.toUpperCase();
     lane.messages = duoFromDetail(detail);
     lane.seq = Number(detail.seq || 0);
@@ -684,6 +770,7 @@ async function duoOpenPair(pairId) {
     DUO.lanes[key] = lane;
     const select = document.getElementById(`duo-${key}-model`);
     if (select && lane.provider) select.value = lane.provider;
+    duoStoreModel(key, lane.provider);
     duoRender(key, "bottom");
     duoSetState(key);
     if (lane.running) duoAttach(key).catch(() => {});
@@ -696,57 +783,24 @@ async function duoOpenPair(pairId) {
   duoRefreshHistory().catch(() => {});
 }
 
-function duoProviderOptions(selected) {
-  const providers = state.chatProviders || [];
-  return providers.map((item) => (
-    `<option value="${esc(item.key)}" ${item.key === selected ? "selected" : ""}>${esc(item.name)}${item.model ? ` · ${esc(item.model)}` : ""}</option>`
-  )).join("");
-}
-
-function duoNewPairModal() {
-  const providers = state.chatProviders || [];
-  if (providers.length < 2) {
-    toast("至少要配好两个大模型才能协同：去「API 中心」再填一个", "error");
-    return;
+/* 新开一组：界面清空回到草稿态，上一组留在历史里，随时能点回去 */
+async function duoNewDraft() {
+  if (DUO.pair && (DUO.lanes.a?.running || DUO.lanes.b?.running)) {
+    await duoStopAll().catch(() => {});
   }
-  const body = `
-    <label class="field"><span>协同名称</span><input class="input" id="pair-title" placeholder="例如 电商主站 双模型联测"></label>
-    <label class="field"><span>左栏模型</span><select class="input" id="pair-a">${duoProviderOptions(providers[0].key)}</select></label>
-    <label class="field"><span>右栏模型</span><select class="input" id="pair-b">${duoProviderOptions(providers[1].key)}</select></label>
-    <label class="field"><span>共享工作目录</span><input class="input" id="pair-dir" placeholder="例如 D:\\work\\shop-test"></label>
-    <p class="hint">这个目录两个模型都能读写：一个抓到的清单写进去，另一个直接读，交接不用贴长内容。留空就用平台默认目录。</p>`;
-  const modal = openModal({
-    title: "新建双模型协同",
-    body,
-    wide: true,
-    footer: `<button class="btn ghost" data-close>取消</button><button class="btn primary" id="pair-create">开始协同</button>`,
-  });
-  modal.querySelector("[data-close]").onclick = () => modal.remove();
-  const create = modal.querySelector("#pair-create");
-  create.onclick = async () => {
-    const payload = {
-      title: modal.querySelector("#pair-title").value.trim(),
-      provider_a: modal.querySelector("#pair-a").value,
-      provider_b: modal.querySelector("#pair-b").value,
-      workdir: modal.querySelector("#pair-dir").value.trim(),
-    };
-    if (payload.provider_a === payload.provider_b) { toast("两边要选不同的大模型", "error"); return; }
-    create.disabled = true;
-    try {
-      const pair = await api("/api/chat/pairs", { method: "POST", body: payload });
-      modal.remove();
-      await duoOpenPair(pair.id);
-      toast("协同已建立，同一句话可以同时发给两边");
-    } catch (error) {
-      toast(error.message, "error");
-      create.disabled = false;
-    }
-  };
+  if (DUO.pair?.workdir) duoStoreDir(DUO.pair.workdir);
+  duoDraft();
+  await duoRefreshHistory().catch(() => {});
+  document.getElementById("duo-a-input")?.focus();
 }
 
 async function duoSaveWorkdir() {
-  if (!DUO.pair) { toast("还没有协同会话", "error"); return; }
   const value = document.getElementById("duo-workdir").value.trim();
+  duoStoreDir(value);
+  if (!DUO.pair) {
+    toast(value ? "目录已记下，第一次下发时就落在那里" : "已记下用平台默认目录");
+    return;
+  }
   try {
     const pair = await api(`/api/chat/pairs/${DUO.pair.id}`, { method: "PATCH", body: { workdir: value } });
     DUO.pair = pair;
@@ -757,19 +811,13 @@ async function duoSaveWorkdir() {
   }
 }
 
-/* 进对话页：有协同就接着上次那条，没有就停在新建引导 */
+/* 进对话页：默认就是两栏，接着上次那组；没有就停在草稿态，写一句就自动建 */
 async function duoBoot() {
   const status = await api("/api/chat/status");
   state.chatProviders = status.providers || [];
   state.chatStatus = status;
-  ["a", "b"].forEach((key) => {
-    const select = document.getElementById(`duo-${key}-model`);
-    if (select) {
-      select.innerHTML = duoProviderOptions("");
-      select.disabled = (state.chatProviders || []).length === 0;
-      if (select.options.length) select.selectedIndex = key === "b" && select.options.length > 1 ? 1 : 0;
-    }
-  });
+  duoShowDuo();
+  duoFillModels();
   const pairs = await api("/api/chat/pairs").catch(() => []);
   const target = DUO.pair && (pairs || []).some((item) => item.id === DUO.pair.id)
     ? DUO.pair.id
@@ -777,14 +825,7 @@ async function duoBoot() {
   if (target) {
     await duoOpenPair(target);
   } else {
-    DUO.pair = null;
-    duoShowDuo();
-    duoBlank(true);
-    ["a", "b"].forEach((key) => {
-      DUO.lanes[key] = duoLaneNew(key);
-      duoSetState(key);
-    });
-    duoRenderNotes();
+    duoDraft();
   }
   await duoRefreshHistory();
 }
@@ -853,7 +894,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const select = document.getElementById(`duo-${key}-model`);
     select.addEventListener("change", () => {
       const lane = DUO.lanes[key];
-      if (lane) { lane.provider = select.value; lane.modelName = select.selectedOptions[0]?.textContent || select.value; }
+      const label = select.selectedOptions[0]?.textContent || select.value;
+      if (lane) { lane.provider = select.value; lane.modelName = label; }
+      duoStoreModel(key, select.value);
+      duoRender(key, "");
+      if (!DUO.pair) return;  // 草稿态：选好就记着，建配对时按这个来
+      const body = key === "a" ? { provider_a: select.value } : { provider_b: select.value };
+      api(`/api/chat/pairs/${DUO.pair.id}`, { method: "PATCH", body })
+        .then((pair) => { if (pair) { DUO.pair = pair; DUO.names[key] = label; } })
+        .catch((error) => {
+          toast(error.message, "error");
+          duoOpenPair(DUO.pair.id).catch(() => {});
+        });
     });
   });
 
@@ -872,7 +924,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  document.getElementById("duo-new").addEventListener("click", duoNewPairModal);
+  document.getElementById("duo-new").addEventListener("click", () => {
+    duoNewDraft().catch((error) => toast(error.message, "error"));
+  });
   document.getElementById("duo-stop").addEventListener("click", () => {
     duoStopAll().catch((error) => toast(error.message, "error"));
   });
@@ -893,10 +947,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const pairs = await api("/api/chat/pairs").catch(() => []);
           if (pairs && pairs.length) await duoOpenPair(pairs[0].id);
           else {
-            DUO.pair = null;
-            duoBlank(true);
-            ["a", "b"].forEach((key) => { DUO.lanes[key] = duoLaneNew(key); duoSetState(key); });
-            duoRenderNotes();
+            duoDraft();
             await duoRefreshHistory();
           }
           toast("已删除");

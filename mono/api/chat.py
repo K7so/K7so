@@ -945,12 +945,15 @@ def _wake_peer(session_id: int, username: str, text: str) -> bool:
         return False
     if agent_running(int(session_id)):
         return False
+    # 被叫醒的这一栏继续用自己选的那个模型，不会因为同伴叫了一声就换成默认模型
+    pair = pairs.pair_for_session(int(session_id))
+    provider = pairs.lane_model(pair, pairs.lane_of_session(int(session_id)))
 
     def start() -> None:
         if agent_running(int(session_id)):
             return
         try:
-            start_run(int(session_id), _auto_loop(int(session_id), username, ""))
+            start_run(int(session_id), _auto_loop(int(session_id), username, provider))
         except Exception:  # 起不来就只留消息，别把发消息这一步也搞挂
             pass
 
@@ -971,8 +974,6 @@ async def create_pair(payload: PairIn, user=Depends(get_current_user)):
     b = (payload.provider_b or "").strip()
     if not a or not b:
         raise HTTPException(status_code=400, detail="左右两侧都要选一个模型")
-    if a == b:
-        raise HTTPException(status_code=400, detail="两侧要选不同的大模型，否则协同没有意义")
     ready = {str(item.get("key") or "") for item in ready_providers()}
     lacking = [key for key in (a, b) if key not in ready]
     if lacking:
@@ -1031,19 +1032,45 @@ def _model_label(key: str) -> str:
 
 
 class PairPatchIn(BaseModel):
-    workdir: str = ""
+    workdir: str | None = None
+    provider_a: str | None = None
+    provider_b: str | None = None
 
 
 @router.patch("/pairs/{pair_id}")
 async def patch_pair(pair_id: int, payload: PairPatchIn, user=Depends(get_current_user)):
-    """改共享目录：两个模型下一轮就落在新目录里干活。"""
+    """改共享目录，或者换某一栏的模型：下一轮就按新配置跑。"""
     username = user.get("u", "")
     pair = _pair_of(pair_id, username)
-    try:
-        updated = pairs.set_workdir(int(pair["id"]), payload.workdir)
-    except OSError as exc:
-        raise HTTPException(status_code=400, detail=f"工作目录不可用：{exc}") from exc
-    audit(username, "pair_workdir", f"协同 #{pair_id} 共享目录改为 {payload.workdir or '默认'}")
+    updated = pair
+    if payload.provider_a is not None or payload.provider_b is not None:
+        ready = {str(item.get("key") or "") for item in ready_providers()}
+        chosen = {
+            "a": (payload.provider_a or "").strip(),
+            "b": (payload.provider_b or "").strip(),
+        }
+        lacking = [key for key, value in chosen.items() if value and value not in ready]
+        if lacking:
+            raise HTTPException(
+                status_code=400,
+                detail=f"模型还没配好：{'、'.join(lacking)}；先到「API 中心」填密钥并点一次测试",
+            )
+        updated = pairs.set_models(
+            int(pair["id"]),
+            model_a=chosen["a"] or None,
+            model_b=chosen["b"] or None,
+        ) or pair
+        changed = "、".join(
+            f"{key.upper()} 栏 → {value}" for key, value in chosen.items() if value
+        )
+        if changed:
+            audit(username, "pair_model", f"协同 #{pair_id} 换模型：{changed}")
+    if payload.workdir is not None:
+        try:
+            updated = pairs.set_workdir(int(pair["id"]), payload.workdir) or updated
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"工作目录不可用：{exc}") from exc
+        audit(username, "pair_workdir", f"协同 #{pair_id} 共享目录改为 {payload.workdir or '默认'}")
     return updated or pair
 
 
@@ -1089,6 +1116,8 @@ async def pair_say(pair_id: int, payload: PairSayIn, user=Depends(get_current_us
     started: dict[str, int] = {}
     for item in targets:
         session_id = sessions[item]
+        # 这一栏用哪个模型：界面上选过就按选的那个跑，没选才退回默认
+        provider = pairs.lane_model(pair, item) or (payload.provider or "")
         with db() as conn:
             conn.execute(
                 "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?,?,?,?)",
@@ -1104,14 +1133,14 @@ async def pair_say(pair_id: int, payload: PairSayIn, user=Depends(get_current_us
         if pending:
             latest = get_action(int(pending[-1]["id"])) or {}
             if _is_affirmative(content):
-                start_run(session_id, _decide_events(latest, True, payload.provider or "", username))
+                start_run(session_id, _decide_events(latest, True, provider, username))
                 started[item] = session_id
                 continue
             if any(hint in content.lower() for hint in NEGATIVE_HINTS) and len(content) <= 12:
-                start_run(session_id, _decide_events(latest, False, payload.provider or "", username))
+                start_run(session_id, _decide_events(latest, False, provider, username))
                 started[item] = session_id
                 continue
-        start_run(session_id, _auto_loop(session_id, username, payload.provider or ""))
+        start_run(session_id, _auto_loop(session_id, username, provider))
         started[item] = session_id
     audit(username, "pair_say", f"双模型协同下发（{'左右同时' if lane == 'both' else lane.upper() + ' 栏'}）：{content[:40]}")
     return {"ok": True, "sessions": started, "pair": pair}

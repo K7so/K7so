@@ -66,6 +66,21 @@ listed = pairs.list_pairs("admin")
 check("列表里能看到", len(listed) == 1 and listed[0]["title"] == "电商主站 双模型")
 check("列表带了消息计数", "message_count" in listed[0] and "note_count" in listed[0])
 
+# 只有一个模型配好时，两侧选同一个也能开两栏（两条会话，各跑各的上下文）
+same = pairs.create_pair("admin", "同一个模型", "deepseek", "deepseek", str(Path(TMP) / "same-ws"))
+check("两侧可以选同一个模型", same["model_a"] == "deepseek" and same["model_b"] == "deepseek")
+check("按栏取模型", pairs.lane_model(same, "a") == "deepseek" and pairs.lane_model(same, "b") == "deepseek")
+swapped = pairs.set_models(int(same["id"]), model_b="openai")
+check("能单独换右侧模型", swapped["model_b"] == "openai" and swapped["model_a"] == "deepseek")
+check("换模型不动会话", int(pairs.get_pair(int(same["id"]))["session_b"]) == int(same["session_b"]))
+with db() as conn:
+    lane_title = conn.execute("SELECT title FROM chat_sessions WHERE id=?", (int(same["session_b"]),)).fetchone()["title"]
+check("会话标题跟着换模型", "openai" in str(lane_title))
+with db() as conn:
+    conn.execute("DELETE FROM chat_sessions WHERE id IN (?,?)", (int(same["session_a"]), int(same["session_b"])))
+pairs.delete_pair(int(same["id"]))
+check("临时配对删干净", pairs.get_pair(int(same["id"])) is None)
+
 # ---------------- 共享目录 ----------------
 
 check("会话拿到配对的工作目录", str(pairs.workdir_for_session(int(pair["session_a"]))) == pair["workdir"])
@@ -185,6 +200,57 @@ check("协同记录接口带目录清单", isinstance(notes_payload.get("files")
 check("协同记录接口带运行状态", set(notes_payload.get("running", {}).keys()) == {"a", "b"})
 check("协同记录接口带剩余预算", "budget" in notes_payload)
 
+# 换模型接口要有「已配好」的连接器才算数：塞两条 ai 连接器（有密钥密文即视为可用）
+from mono.db import now_iso as _now  # noqa: E402
+
+with db() as conn:
+    for key, name in (("deepseek", "DeepSeek"), ("openai", "OpenAI")):
+        conn.execute(
+            "INSERT OR REPLACE INTO connectors (key, name, category, auth_type, enabled, config_json, secret_enc, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?)",
+            (key, name, "ai", "bearer", 1, '{"model":"test-model"}', "enc", _now(), _now()),
+        )
+ready = chat_api.ready_providers()
+check("配好的模型能被列出来", {item["key"] for item in ready} >= {"deepseek", "openai"})
+
+patched_model = asyncio.run(
+    chat_api.patch_pair(int(pair["id"]), chat_api.PairPatchIn(provider_b="deepseek"), {"u": "admin"})
+)
+check("换模型接口生效", patched_model["model_b"] == "deepseek")
+check("换完左栏不受影响", patched_model["model_a"] == "deepseek")
+try:
+    asyncio.run(chat_api.patch_pair(int(pair["id"]), chat_api.PairPatchIn(provider_a="not-configured"), {"u": "admin"}))
+    check("没配好的模型不许选", False, "应当报错")
+except Exception as exc:  # HTTPException
+    check("没配好的模型不许选", "还没配好" in str(getattr(exc, "detail", exc)))
+pairs.set_models(int(pair["id"]), model_a="deepseek", model_b="openai")
+
+# 下发时按栏带模型：把 start_run 换掉，只看它实际拿到的 provider 是不是这一栏选的那个
+recorded: list[tuple[str, int, str]] = []
+real_start, real_loop = chat_api.start_run, chat_api._auto_loop
+chat_api._auto_loop = lambda sid, name, provider: recorded.append(("loop", int(sid), provider)) or iter(())
+chat_api.start_run = lambda sid, events: recorded.append(("run", int(sid), "")) or None
+try:
+    asyncio.run(chat_api.pair_say(int(pair["id"]), chat_api.PairSayIn(lane="b", content="只测右栏"), {"u": "admin"}))
+    asyncio.run(chat_api.pair_say(int(pair["id"]), chat_api.PairSayIn(lane="both", content="两边一起"), {"u": "admin"}))
+finally:
+    chat_api.start_run, chat_api._auto_loop = real_start, real_loop
+providers = [provider for kind, _, provider in recorded if kind == "loop"]
+check("单栏下发用本栏选的模型", providers[:1] == ["openai"])
+check("同时下发各用各的模型", providers[1:3] == ["deepseek", "openai"])
+
+# 换完模型再下发，跑的就是新模型
+pairs.set_models(int(pair["id"]), model_b="deepseek")
+recorded.clear()
+chat_api._auto_loop = lambda sid, name, provider: recorded.append(("loop", int(sid), provider)) or iter(())
+chat_api.start_run = lambda sid, events: None
+try:
+    asyncio.run(chat_api.pair_say(int(pair["id"]), chat_api.PairSayIn(lane="b", content="换模型后再试"), {"u": "admin"}))
+finally:
+    chat_api.start_run, chat_api._auto_loop = real_start, real_loop
+check("换模型后下一轮就生效", [p for k, _, p in recorded if k == "loop"] == ["deepseek"])
+pairs.set_models(int(pair["id"]), model_b="openai")
+
 patched = asyncio.run(chat_api.patch_pair(int(pair["id"]), chat_api.PairPatchIn(workdir=str(Path(TMP) / "ws3"), ), {"u": "admin"}))
 check("改目录接口生效", str(Path(TMP).resolve() / "ws3") in str(patched["workdir"]))
 pairs.set_workdir(int(pair["id"]), str(WS))
@@ -195,12 +261,17 @@ html = (ROOT / "mono/static/index.html").read_text(encoding="utf-8")
 css = (ROOT / "mono/static/style.css").read_text(encoding="utf-8")
 js = (ROOT / "mono/static/duo.js").read_text(encoding="utf-8")
 appjs = (ROOT / "mono/static/app.js").read_text(encoding="utf-8")
+chat_src = (ROOT / "mono/api/chat.py").read_text(encoding="utf-8")
 
 check("对话页有双模型容器", 'id="duo-view"' in html)
 check("左右两栏各有消息区", 'id="duo-a-messages"' in html and 'id="duo-b-messages"' in html)
 check("中间有协同记录区", 'id="duo-peer-list"' in html)
 check("协同记录在左右两栏之间", html.index('id="duo-a-messages"') < html.index('id="duo-peer-list"') < html.index('id="duo-b-messages"'))
+check("默认就是两栏，没有「先新建」的挡板", 'id="duo-blank"' not in html)
+check("每栏顶部有模型下拉", 'id="duo-a-model"' in html and 'id="duo-b-model"' in html)
+check("左栏模型下拉在消息区之前", html.index('id="duo-a-model"') < html.index('id="duo-a-messages"'))
 check("有共享目录输入", 'id="duo-workdir"' in html)
+check("历史抽屉默认收起", 'class="history-drawer hidden"' in html)
 check("有同时下发入口", 'id="duo-both-form"' in html)
 check("有历史抽屉", 'id="history-drawer"' in html)
 check("协同目录清单在界面上", 'id="duo-files"' in html)
@@ -208,8 +279,8 @@ check("单会话布局还在", 'id="chat-layout"' in html and 'id="chat-messages
 check("单会话页能返回协同", 'id="chat-back-duo"' in html)
 check("加载了双模型脚本", "/static/duo.js" in html)
 
-check("三栏栅格", "grid-template-columns: minmax(0, 1fr) 318px minmax(0, 1fr)" in css)
-check("侧栏收窄到 208", "grid-template-columns: 208px minmax(0, 1fr)" in css)
+check("三栏栅格：左右等宽、中间一小份", "grid-template-columns: minmax(0, 1fr) 192px minmax(0, 1fr)" in css)
+check("侧栏收窄到 184", "grid-template-columns: 184px minmax(0, 1fr)" in css)
 check("输入框有最小宽度兜底", "min-width: 150px" in css and "min-width: 120px" in css)
 check("协同记录卡片有样式", ".duo-note" in css and ".duo-files" in css)
 check("历史抽屉有样式", ".history-drawer" in css)
@@ -218,6 +289,13 @@ check("前端按栏分流事件", "function duoEvent(" in js and "function duoCo
 check("前端能下发到单栏与两边", "function duoSay(" in js and 'keys.length === 2 ? "both"' in js)
 check("前端会重置流的序号", "item.seq = 0" in js)
 check("前端轮询目录变化", "duoPollNotes" in js and "data.files" in js)
+check("没有配对时直接进草稿态", "function duoDraft(" in js and "duoBlank" not in js)
+check("第一句话自动建配对", "function duoEnsurePair(" in js and 'provider_a: a' in js and 'provider_b: b' in js)
+check("下拉里的模型来自接口返回", "state.chatProviders" in js and "function duoFillModels(" in js)
+check("换模型会落库", "provider_a: select.value" in js and "provider_b: select.value" in js)
+check("后端按栏取模型", "pairs.lane_model(pair, item)" in chat_src)
+check("叫醒同伴也按栏取模型", "pairs.lane_model(pair, pairs.lane_of_session" in chat_src)
+check("换模型接口收两栏参数", "provider_a: str | None" in chat_src and "provider_b: str | None" in chat_src)
 check("导航进入对话页走协同", 'if (page === "chat") await duoBoot();' in appjs)
 check("打开单会话会切回旧布局", "typeof duoShowSingle === \"function\"" in appjs)
 

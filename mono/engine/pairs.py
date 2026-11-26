@@ -178,6 +178,52 @@ def set_workdir(pair_id: int, workdir: str) -> dict | None:
     return get_pair(pair_id)
 
 
+def lane_model(pair: dict | None, lane: str) -> str:
+    """这一栏该用哪个模型：建配对时选的那个，下一轮就用它跑。"""
+    if not pair:
+        return ""
+    key = "model_a" if lane == "a" else "model_b"
+    return str(pair.get(key) or "").strip()
+
+
+def set_models(pair_id: int, model_a: str | None = None, model_b: str | None = None) -> dict | None:
+    """换某一栏的模型：只改配对记录，两条会话的内容原样保留。
+
+    换模型不等于清空对话——上一轮的进展、共享目录、协同记录都还在，
+    新模型进来读得到上下文，接手继续干。
+    """
+    pair = get_pair(pair_id)
+    if not pair:
+        return None
+    fields: list[str] = []
+    values: list[str] = []
+    for column, value in (("model_a", model_a), ("model_b", model_b)):
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        fields.append(f"{column}=?")
+        values.append(text)
+    if not fields:
+        return pair
+    fields.append("updated_at=?")
+    values.append(now_iso())
+    values.append(int(pair_id))
+    with db() as conn:
+        conn.execute(f"UPDATE chat_pairs SET {', '.join(fields)} WHERE id=?", tuple(values))
+    updated = get_pair(pair_id) or pair
+    # 会话标题里带着模型名，换完顺手对齐，列表里不会还写着旧模型
+    for lane in LANES:
+        model = lane_model(updated, lane)
+        session_id = int(updated["session_a"] if lane == "a" else updated["session_b"])
+        title = f"{str(updated.get('title') or '双模型协同')[:40]} · {model or lane.upper()}"
+        with db() as conn:
+            conn.execute("UPDATE chat_sessions SET title=? WHERE id=?", (title, session_id))
+    return updated
+
+
+
 # ---------------- 两个模型之间的对话 ----------------
 
 def add_note(pair: dict, from_lane: str, content: str) -> dict:
