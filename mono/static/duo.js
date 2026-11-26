@@ -43,17 +43,27 @@ function duoBudget(count) {
   chip.classList.toggle("low", left <= 0);
 }
 
+// 没配模型时把发送口封掉，别让人点了才弹一句「没有可用模型」
+function duoGateSends(ready) {
+  const has = ready === undefined ? duoReadyProviders().length > 0 : !!ready;
+  document.querySelectorAll(".duo-composer button, #duo-both-form button").forEach((btn) => {
+    btn.disabled = !has;
+    btn.title = has ? "" : "没有可用模型";
+  });
+}
+
 function duoSetState(key) {
   const lane = DUO.lanes[key];
   const chip = document.getElementById(`duo-${key}-state`);
   if (!chip || !lane) return;
-  if (!lane.sessionId) {
-    chip.textContent = DUO.pair ? "待开工" : "选好就能开始";
-    chip.className = "duo-state";
-    return;
-  }
-  chip.textContent = lane.running ? "运行中" : "空闲";
-  chip.className = `duo-state${lane.running ? " on" : ""}`;
+  const ready = duoReadyProviders().length > 0;
+  duoGateSends(ready);
+  const running = !!(lane.sessionId && lane.running);
+  chip.textContent = lane.sessionId
+    ? (running ? "运行中" : "空闲")
+    : (DUO.pair ? "待开工" : "选好就能开始");
+  // hidden 要跟着 className 一起写：整串覆盖会把隐藏状态冲掉
+  chip.className = `duo-state${running ? " on" : ""}${ready ? "" : " hidden"}`;
 }
 
 /* 模型下拉：选项来自 API 中心已经配好并检测通过的那些 */
@@ -88,7 +98,7 @@ function duoFillModels() {
     const want = keys.includes(stored) ? stored : fallback[index];
     select.innerHTML = providers.length
       ? providers.map((item) => `<option value="${esc(item.key)}">${esc(item.name)}${item.model ? ` · ${esc(item.model)}` : ""}</option>`).join("")
-      : `<option value="">还没有可用的模型</option>`;
+      : `<option value="">没有可用模型</option>`;
     select.disabled = !providers.length;
     if (want) select.value = want;
     const lane = DUO.lanes[key];
@@ -162,7 +172,7 @@ function duoRender(key, anchor) {
   if (!lane.sessionId) {
     box.innerHTML = duoReadyProviders().length
       ? `<div class="chat-empty duo-empty"><p>${esc(lane.modelName || "这一栏")} 已就位。写一句话就开始，两栏各跑各的，中间会显示它们互相说了什么。</p></div>`
-      : `<div class="chat-empty duo-empty"><p>还没有可用的模型。去「API 中心」填一个大模型的密钥并点一次检测，回来这里就能选。</p></div>`;
+      : `<div class="chat-empty duo-empty"><p>没有可用模型</p></div>`;
     return;
   }
   const messages = lane.messages || [];
@@ -513,7 +523,7 @@ function duoDraft() {
 async function duoEnsurePair(text) {
   if (DUO.pair) return DUO.pair;
   if (!duoReadyProviders().length) {
-    throw new Error("还没有可用的模型：去「API 中心」填一个密钥并检测一下");
+    throw new Error("没有可用模型");
   }
   const a = document.getElementById("duo-a-model")?.value || "";
   const b = document.getElementById("duo-b-model")?.value || "";

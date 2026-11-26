@@ -350,7 +350,7 @@ def test_frontend_wiring() -> None:
     check("自定义模型必须填地址", "自定义模型必须填写 Base URL" in js)
     check("自定义模型必须填模型名", "自定义模型必须填写模型名称" in js)
     check("免密钥的模型也能直接检测", "const noSecret = !connector.secret_required;" in js)
-    check("静态资源换了版本号", "?v=20261126d" in html)
+    check("静态资源换了版本号", "?v=20261126g" in html)
     check("接入列表名称与类型分两行", 'class="td-title"><strong>${esc(item.name)}</strong><small>' in js)
     check("接入列表表头说清两列", "名称 / 类型" in js)
 

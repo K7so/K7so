@@ -2887,7 +2887,7 @@ function renderChatProviders(status) {
   const select = $("#chat-provider");
   const providers = state.chatProviders || [];
   if (!status.available || !providers.length) {
-    select.innerHTML = `<option value="">未配置大模型</option>`;
+    select.innerHTML = `<option value="">没有可用模型</option>`;
     select.disabled = true;
     return;
   }

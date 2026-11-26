@@ -173,13 +173,13 @@ mono/
 ├── security.py     口令哈希、Fernet、会话签名
 └── main.py         FastAPI 装配
 data/               运行时数据，不进仓库
-tests/              1176 项回归测试
+tests/              1179 项回归测试
 ```
 
 ## 测试
 
 ```bash
-python tests/run_all.py     # 1176 项，用临时数据目录，不动 data/
+python tests/run_all.py     # 1179 项，用临时数据目录，不动 data/
 ```
 
 覆盖 agent 主循环、双模型协同、接口边界、设置项是否真生效、文件解析、看门狗、首次启动口令等十一个文件。
