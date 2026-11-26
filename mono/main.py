@@ -17,6 +17,7 @@ from .api import (
     dashboard,
     findings,
     kits,
+    memory,
     reports,
     scans,
     settings,
@@ -57,7 +58,7 @@ app.include_router(auth.router)
 
 for module in (
     dashboard, chat, assets, asset_modules, kits, scans, findings,
-    connectors, capabilities, reports, settings,
+    connectors, capabilities, reports, settings, memory,
 ):
     app.include_router(module.router, dependencies=[Depends(get_current_user)])
 

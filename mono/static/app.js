@@ -6,7 +6,7 @@ const SEV_LABELS = { critical: "严重", high: "高危", medium: "中危", low: 
 const STATUS_LABELS = { queued: "排队", running: "运行中", completed: "已完成", failed: "失败", cancelled: "已取消" };
 const PAGE_TITLES = {
   dashboard: "仪表盘", chat: "智能工作", assets: "资产监管", kits: "K7so工具", scans: "渗透测试",
-  findings: "漏洞结果", connectors: "API 中心", paths: "目录配置", capabilities: "模型能力",
+  findings: "漏洞结果", connectors: "API 中心", paths: "目录配置", memory: "模型记忆", capabilities: "模型能力",
   audit: "审计日志", settings: "平台设置",
 };
 const CATEGORY_ORDER = ["ai", "recon", "intel", "vuln", "tool"];
@@ -339,6 +339,7 @@ async function navigate(page) {
     if (page === "findings") await loadFindings();
     if (page === "connectors") await loadConnectors();
     if (page === "paths") await loadPaths();
+    if (page === "memory") await loadMemory();
     if (page === "capabilities") await loadCapabilities();
     if (page === "audit") await loadAudit();
     if (page === "settings") await loadSettings();
@@ -2050,6 +2051,114 @@ $("#paths-save").addEventListener("click", async () => {
     await loadPaths();
   } catch (error) { toast(error.message, "error"); }
 });
+
+/* ---------------- memory spaces ---------------- */
+function memorySize(bytes) {
+  const value = Number(bytes || 0);
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function memoryCard(space) {
+  const isDefault = !!space.default;
+  const id = Number(space.id || 0);
+  return `<article class="memory-card${isDefault ? " default" : ""}">
+    <div class="memory-head">
+      <strong>${esc(space.name || "未命名")}</strong>
+      <span class="memory-tag${isDefault ? " on" : ""}">${isDefault ? "跟随目录配置" : "独立"}</span>
+    </div>
+    <div class="memory-dir">${esc(space.dir || "")}</div>
+    <div class="memory-meta">${Number(space.files || 0)} 个文件 · ${memorySize(space.bytes)}${space.exists ? "" : " · 目录不存在"}</div>
+    ${space.note ? `<div class="memory-note">${esc(space.note)}</div>` : ""}
+    <div class="memory-actions">
+      <button class="btn ghost small" data-memory-files="${id}">看清单</button>
+      <button class="btn ghost small" data-memory-edit="${id}" ${isDefault ? "disabled" : ""}>修改</button>
+      <button class="btn ghost small" data-memory-del="${id}" ${isDefault ? "disabled" : ""}>删除</button>
+    </div>
+  </article>`;
+}
+
+async function loadMemory() {
+  const data = await api("/api/memory/spaces");
+  state.memorySpaces = data.spaces || [];
+  $("#memory-list").innerHTML = state.memorySpaces.map(memoryCard).join("")
+    || `<div class="memory-empty">还没有记忆空间</div>`;
+  $$("[data-memory-files]").forEach((btn) => btn.addEventListener("click", () => memoryFiles(Number(btn.dataset.memoryFiles))));
+  $$("[data-memory-edit]").forEach((btn) => btn.addEventListener("click", () => memoryEdit(Number(btn.dataset.memoryEdit))));
+  $$("[data-memory-del]").forEach((btn) => btn.addEventListener("click", () => memoryDelete(Number(btn.dataset.memoryDel))));
+}
+
+function memoryFormModal(space) {
+  const editing = !!space;
+  const body = `
+    <label class="field"><span>名称</span><input class="input" id="mem-name" maxlength="40" placeholder="例如 客户A · 白盒记忆" value="${esc(space?.name || "")}"></label>
+    <label class="field"><span>记忆目录</span><input class="input" id="mem-dir" placeholder="留空则在 data\memory_spaces 下按名字新建" value="${esc(space?.dir || "")}"></label>
+    <label class="field"><span>备注（给谁用、记什么）</span><input class="input" id="mem-note" maxlength="200" placeholder="例如 只放这家客户的接口清单与历史结论" value="${esc(space?.note || "")}"></label>
+    <p class="hint">每一栏只读自己那份：把一个模型的偏好、历史结论放在这里，另一个模型不会自动看到。</p>`;
+  const modal = openModal({
+    title: editing ? "修改记忆空间" : "新建记忆空间",
+    body,
+    footer: `<button class="btn ghost" data-close>取消</button><button class="btn primary" id="mem-save">保存</button>`,
+  });
+  modal.querySelector("[data-close]").onclick = () => modal.remove();
+  const save = modal.querySelector("#mem-save");
+  save.onclick = async () => {
+    const payload = {
+      name: modal.querySelector("#mem-name").value.trim(),
+      dir: modal.querySelector("#mem-dir").value.trim(),
+      note: modal.querySelector("#mem-note").value.trim(),
+    };
+    if (!payload.name) { toast("先给记忆起个名字", "error"); return; }
+    save.disabled = true;
+    try {
+      if (editing) await api(`/api/memory/spaces/${space.id}`, { method: "PATCH", body: payload });
+      else await api("/api/memory/spaces", { method: "POST", body: payload });
+      modal.remove();
+      toast(editing ? "记忆空间已更新" : "记忆空间已建好");
+      await loadMemory();
+      if (typeof duoFillMemories === "function") duoFillMemories().catch(() => {});
+    } catch (error) {
+      toast(error.message, "error");
+      save.disabled = false;
+    }
+  };
+}
+
+function memoryEdit(spaceId) {
+  const space = (state.memorySpaces || []).find((item) => Number(item.id) === spaceId);
+  if (!space) return;
+  memoryFormModal(space);
+}
+
+async function memoryDelete(spaceId) {
+  const space = (state.memorySpaces || []).find((item) => Number(item.id) === spaceId);
+  if (!space) return;
+  if (!confirm(`删除记忆「${space.name}」？目录里的文件会保留，只是不再作为记忆被选用。`)) return;
+  try {
+    await api(`/api/memory/spaces/${spaceId}`, { method: "DELETE" });
+    toast("已删除，文件还在原目录");
+    await loadMemory();
+    if (typeof duoFillMemories === "function") duoFillMemories().catch(() => {});
+  } catch (error) { toast(error.message, "error"); }
+}
+
+async function memoryFiles(spaceId) {
+  try {
+    const data = await api(`/api/memory/spaces/${spaceId}/files`);
+    const panel = $("#memory-files-panel");
+    const files = data.files || [];
+    $("#memory-files-title").textContent = `${data.space?.name || "记忆"} · ${files.length} 个文件`;
+    $("#memory-files").innerHTML = files.length
+      ? files.map((item) => `<div class="memory-file"><span>${esc(item.name)}</span><span>${memorySize(item.bytes)}</span></div>`).join("")
+      : `<div class="memory-empty">目录里还没有文件。把偏好、历史结论写成 .md 放进去即可。</div>`;
+    panel.classList.remove("hidden");
+  } catch (error) { toast(error.message, "error"); }
+}
+
+$("#memory-new").addEventListener("click", () => memoryFormModal(null));
+$("#memory-refresh").addEventListener("click", () => loadMemory().catch((error) => toast(error.message, "error")));
+$("#memory-files-close").addEventListener("click", () => $("#memory-files-panel").classList.add("hidden"));
 
 /* ---------------- smart work ---------------- */
 const MODE_LABELS = { active: "完整渗透测试", passive: "情报测绘" };

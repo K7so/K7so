@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..db import audit, db, get_settings, now_iso, set_settings
-from ..engine import coverage, pairs, shared
+from ..engine import coverage, memory_spaces, pairs, shared
 from ..engine.agent import (
     BIG_RESULT_TOOLS,
     LARGE_RESULT_CHARS,
@@ -700,12 +700,14 @@ async def _auto_loop(session_id: int, username: str, provider: str):
                     shared.log(session_id, "progress", str(event.get("content") or ""))
                 elif kind == "finding":
                     card = event.get("finding") or {}
-                    shared.log(
-                        session_id,
-                        "finding",
+                    text = (
                         f"{card.get('severity') or ''} {card.get('title') or ''}".strip()
-                        + (f" · {card.get('url')}" if card.get("url") else ""),
+                        + (f" · {card.get('url')}" if card.get("url") else "")
                     )
+                    # 两条路都走：一条留给下一轮的「同伴进度」，一条直接贴进协同对话，
+                    # 这样「我这栏发现了什么」对方和用户都看得见
+                    shared.log(session_id, "finding", text)
+                    pairs.note_finding(session_id, card)
                 yield event
         except asyncio.CancelledError:
             # 用户点了停止 / 平台要开新一批：这是主动打断，不能当成「接口报错」去重试
@@ -913,6 +915,9 @@ class PairIn(BaseModel):
     provider_a: str = ""
     provider_b: str = ""
     workdir: str = ""
+    # 每一栏用哪份记忆：0 / 留空 = 默认记忆
+    memory_a: int = 0
+    memory_b: int = 0
 
 
 class PairSayIn(BaseModel):
@@ -990,9 +995,20 @@ async def create_pair(payload: PairIn, user=Depends(get_current_user)):
         except OSError as exc:
             raise HTTPException(status_code=400, detail=f"工作目录不可用：{exc}") from exc
     title = payload.title.strip()[:40] or "双模型协同"
-    pair = pairs.create_pair(username, title, a, b, workdir)
+    memory_a = max(0, int(payload.memory_a or 0))
+    memory_b = max(0, int(payload.memory_b or 0))
+    for value in (memory_a, memory_b):
+        if value and not memory_spaces.get_space(value, username):
+            raise HTTPException(status_code=400, detail=f"记忆空间不存在：{value}")
+    pair = pairs.create_pair(username, title, a, b, workdir, memory_a, memory_b)
     pairs.reset_budget(int(pair["id"]), pairs.DEFAULT_PEER_BUDGET)
-    audit(username, "pair_create", f"建立双模型协同：{a} + {b}（目录 {workdir or '默认'}）")
+    audit(
+        username,
+        "pair_create",
+        f"建立双模型协同：{a} + {b}（目录 {workdir or '默认'}；"
+        f"记忆 {(memory_spaces.get_space(memory_a, username) or {}).get('name', '默认记忆')}"
+        f" / {(memory_spaces.get_space(memory_b, username) or {}).get('name', '默认记忆')}）",
+    )
     return pairs.get_pair(int(pair["id"])) or pair
 
 
@@ -1019,7 +1035,21 @@ async def get_pair_detail(pair_id: int, user=Depends(get_current_user)):
         },
         "notes": pairs.notes(int(pair["id"]), 0, 500),
         "budget": int(pair.get("peer_budget") or 0),
+        "memory": {
+            "a": int(pair.get("memory_a") or 0),
+            "b": int(pair.get("memory_b") or 0),
+            "names": {
+                "a": _memory_label(pair.get("memory_a"), username),
+                "b": _memory_label(pair.get("memory_b"), username),
+                "default": memory_spaces.DEFAULT_NAME,
+            },
+        },
     }
+
+
+def _memory_label(space_id, username: str) -> str:
+    space = memory_spaces.get_space(int(space_id or 0), username)
+    return str((space or {}).get("name") or memory_spaces.DEFAULT_NAME)
 
 
 def _model_label(key: str) -> str:
@@ -1035,6 +1065,9 @@ class PairPatchIn(BaseModel):
     workdir: str | None = None
     provider_a: str | None = None
     provider_b: str | None = None
+    # 记忆空间：0 或 None 都表示「跟随默认记忆」
+    memory_a: int | None = None
+    memory_b: int | None = None
 
 
 @router.patch("/pairs/{pair_id}")
@@ -1071,6 +1104,22 @@ async def patch_pair(pair_id: int, payload: PairPatchIn, user=Depends(get_curren
         except OSError as exc:
             raise HTTPException(status_code=400, detail=f"工作目录不可用：{exc}") from exc
         audit(username, "pair_workdir", f"协同 #{pair_id} 共享目录改为 {payload.workdir or '默认'}")
+    if payload.memory_a is not None or payload.memory_b is not None:
+        for value in (payload.memory_a, payload.memory_b):
+            if value and not memory_spaces.get_space(int(value), username):
+                raise HTTPException(status_code=400, detail=f"记忆空间不存在：{value}")
+        updated = pairs.set_memories(
+            int(pair["id"]),
+            memory_a=payload.memory_a,
+            memory_b=payload.memory_b,
+        ) or updated
+        names = []
+        for lane, value in (("a", payload.memory_a), ("b", payload.memory_b)):
+            if value is not None:
+                space = memory_spaces.get_space(int(value), username)
+                names.append(f"{lane.upper()} 栏 → {(space or {}).get('name') or '默认记忆'}")
+        if names:
+            audit(username, "pair_memory", f"协同 #{pair_id} 换记忆：{'、'.join(names)}")
     return updated or pair
 
 

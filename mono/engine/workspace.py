@@ -45,7 +45,21 @@ class WorkspaceError(Exception):
     """工作目录未配置或目标路径越界。"""
 
 
-def memory_path() -> Path | None:
+def memory_path(session_id: int | None = None) -> Path | None:
+    """记忆根目录：这一栏单独配了记忆空间就用它，否则用全局默认那份。
+
+    双模型协同时左右两栏各读各的记忆，互不串味；单会话与老库行为不变。
+    """
+    sid = current_tool_session() if session_id is None else int(session_id or 0)
+    if sid:
+        try:
+            from .memory_spaces import path_for_session
+
+            override = path_for_session(sid)
+        except Exception:  # 记忆空间出问题不该把整轮执行带崩，退回默认
+            override = None
+        if override is not None:
+            return override
     value = (get_settings().get("memory_path") or "").strip()
     return Path(value).expanduser() if value else None
 

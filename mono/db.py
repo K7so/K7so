@@ -300,6 +300,19 @@ CREATE TABLE IF NOT EXISTS chat_peer_notes (
     delivered_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_chat_peer_notes_pair ON chat_peer_notes(pair_id, id);
+
+-- 模型记忆空间：一个模型一份长期记忆（就是一个目录），互不串味。
+-- 两个模型各自测试时读自己的记忆，同一个平台可以并存多份。
+CREATE TABLE IF NOT EXISTS memory_spaces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    dir TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memory_spaces_user ON memory_spaces(username, id);
 """
 
 DEFAULT_SETTINGS: dict[str, str] = {
@@ -399,6 +412,20 @@ def _migrate_chat_sessions(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_pair ON chat_sessions(pair_id)")
 
 
+def _migrate_chat_pairs(conn: sqlite3.Connection) -> None:
+    """配对表要知道每一栏用哪份记忆空间。
+
+    0 表示「跟随平台默认记忆」：老库升级后两栏都用默认那一份，行为不变。
+    """
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(chat_pairs)").fetchall()}
+    for name, ddl in (
+        ("memory_a", "INTEGER NOT NULL DEFAULT 0"),
+        ("memory_b", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        if name not in existing:
+            conn.execute(f"ALTER TABLE chat_pairs ADD COLUMN {name} {ddl}")
+
+
 def _initial_admin_password() -> str:
     """首次启动的管理员口令：环境变量优先，没设就随机生成一个。
 
@@ -440,6 +467,7 @@ def init_db() -> None:
         _migrate_findings(conn)
         _migrate_chat_messages(conn)
         _migrate_chat_sessions(conn)
+        _migrate_chat_pairs(conn)
 
         user_count = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
         if user_count == 0:

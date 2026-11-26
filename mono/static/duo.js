@@ -109,6 +109,82 @@ function duoFillModels() {
   });
 }
 
+/* ---------------- 记忆空间：两栏各读各的 ---------------- */
+
+function duoMemorySpaces() {
+  return DUO.memories || [];
+}
+
+function duoStoredMemory(key) {
+  try {
+    return Number(localStorage.getItem(`mono_duo_memory_${key}`) || 0) || 0;
+  } catch (error) {
+    return 0;
+  }
+}
+
+function duoStoreMemory(key, value) {
+  try { localStorage.setItem(`mono_duo_memory_${key}`, String(Number(value || 0))); } catch (error) { /* 隐私模式下写不进去，忽略 */ }
+}
+
+// 下拉里只放短名：「客户A · 白盒记忆」显示成「客户A」，全名放 title，栏头才放得下
+function duoMemoryShort(name) {
+  const text = String(name || "").trim();
+  if (!text) return "默认记忆";
+  const head = text.split("·")[0].trim();
+  return head.length >= 2 ? head : text.slice(0, 10);
+}
+
+function duoMemoryFull(select) {
+  const spaces = duoMemorySpaces();
+  const id = Number(select.value || 0);
+  const hit = spaces.find((item) => Number(item.id || 0) === id);
+  return String((hit && hit.name) || "默认记忆");
+}
+
+function duoMemoryOptions(selected) {
+  const spaces = duoMemorySpaces();
+  if (!spaces.length) return `<option value="0">默认记忆</option>`;
+  const want = Number(selected || 0);
+  return spaces.map((item) => (
+    `<option value="${Number(item.id || 0)}" title="${esc(item.name || "默认记忆")}" ${Number(item.id || 0) === want ? "selected" : ""}>${esc(duoMemoryShort(item.name))}</option>`
+  )).join("");
+}
+
+async function duoFillMemories() {
+  const data = await api("/api/memory/spaces").catch(() => ({ spaces: [] }));
+  DUO.memories = data.spaces || [];
+  ["a", "b"].forEach((key) => {
+    const select = document.getElementById(`duo-${key}-memory`);
+    if (!select) return;
+    const current = DUO.pair
+      ? Number((DUO.pair[`memory_${key}`] || 0))
+      : duoStoredMemory(key);
+    select.innerHTML = duoMemoryOptions(current);
+    select.value = String(current);
+    select.title = `这一栏读哪份记忆：${duoMemoryFull(select)}`;
+  });
+}
+
+function duoBindMemorySelect(key, select) {
+  select.addEventListener("change", () => {
+    const value = Number(select.value || 0);
+    duoStoreMemory(key, value);
+    select.title = `这一栏读哪份记忆：${duoMemoryFull(select)}`;
+    if (!DUO.pair) return;  // 草稿态：先记着，建配对时按这个来
+    const body = key === "a" ? { memory_a: value } : { memory_b: value };
+    api(`/api/chat/pairs/${DUO.pair.id}`, { method: "PATCH", body })
+      .then((pair) => {
+        if (pair) DUO.pair = pair;
+        toast(`这一栏的记忆已切到「${duoMemoryFull(select)}」，下一轮生效`);
+      })
+      .catch((error) => {
+        toast(error.message, "error");
+        duoOpenPair(DUO.pair.id).catch(() => {});
+      });
+  });
+}
+
 function duoFromDetail(detail) {
   const messages = (detail.messages || [])
     .filter((item) => item.role !== "tool")
@@ -504,6 +580,7 @@ function duoDraft() {
   if (title) title.textContent = "双模型协同";
   document.getElementById("duo-budget")?.classList.add("hidden");
   duoFillModels();
+  duoFillMemories().catch(() => {});
   ["a", "b"].forEach((key) => {
     const lane = duoLaneNew(key);
     const select = document.getElementById(`duo-${key}-model`);
@@ -531,7 +608,14 @@ async function duoEnsurePair(text) {
   const dir = document.getElementById("duo-workdir")?.value.trim() || "";
   const pair = await api("/api/chat/pairs", {
     method: "POST",
-    body: { title: String(text || "").slice(0, 24), provider_a: a, provider_b: b, workdir: dir },
+    body: {
+      title: String(text || "").slice(0, 24),
+      provider_a: a,
+      provider_b: b,
+      workdir: dir,
+      memory_a: Number(document.getElementById("duo-a-memory")?.value || 0),
+      memory_b: Number(document.getElementById("duo-b-memory")?.value || 0),
+    },
   });
   await duoOpenPair(pair.id);
   return DUO.pair;
@@ -770,6 +854,13 @@ async function duoOpenPair(pairId) {
   ["a", "b"].forEach((key) => {
     const lane = duoLaneNew(key);
     const detail = (data.lanes && data.lanes[key]) || {};
+    const memorySelect = document.getElementById(`duo-${key}-memory`);
+    if (memorySelect) {
+      const spaceId = Number((data.memory && data.memory[key]) || 0);
+      memorySelect.innerHTML = duoMemoryOptions(spaceId);
+      memorySelect.value = String(spaceId);
+      memorySelect.title = `这一栏读哪份记忆：${(data.memory && data.memory.names && data.memory.names[key]) || "默认记忆"}`;
+    }
     lane.sessionId = Number(detail.id || 0);
     // 这一栏用哪个模型，以配对记录为准：建的时候选的、后来换的，都在这里
     lane.provider = String((key === "a" ? data.pair.model_a : data.pair.model_b) || detail.provider || "");
@@ -828,6 +919,7 @@ async function duoBoot() {
   state.chatStatus = status;
   duoShowDuo();
   duoFillModels();
+  await duoFillMemories();
   const pairs = await api("/api/chat/pairs").catch(() => []);
   const target = DUO.pair && (pairs || []).some((item) => item.id === DUO.pair.id)
     ? DUO.pair.id
@@ -939,6 +1031,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   document.getElementById("duo-stop").addEventListener("click", () => {
     duoStopAll().catch((error) => toast(error.message, "error"));
+  });
+  ["a", "b"].forEach((key) => {
+    const select = document.getElementById(`duo-${key}-memory`);
+    if (select) duoBindMemorySelect(key, select);
   });
   document.getElementById("duo-save-dir").addEventListener("click", duoSaveWorkdir);
   document.getElementById("duo-history").addEventListener("click", () => {

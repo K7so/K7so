@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>K7so // Agent 自动化渗透测试平台</title>
-<link rel="stylesheet" href="/static/style.css?v=20261126g">
+<link rel="stylesheet" href="/static/style.css?v=20261126j">
 </head>
 <body>
 
@@ -29,7 +29,7 @@
       <span>仅限已授权资产的渗透测试</span>
     </div>
   </div>
-  <div class="login-meta">K7so v3.6.2 · AUTHORIZED USE ONLY</div>
+  <div class="login-meta">K7so v3.7.0 · AUTHORIZED USE ONLY</div>
 </div>
 
 <div id="disclaimer-screen" class="login-screen hidden">
@@ -65,9 +65,10 @@
       <button class="nav-item" data-page="findings"><span class="idx">04</span><span class="nav-label">漏洞结果</span></button>
       <button class="nav-item" data-page="connectors"><span class="idx">05</span><span class="nav-label">API 中心</span></button>
       <button class="nav-item" data-page="paths"><span class="idx">06</span><span class="nav-label">目录配置</span></button>
-      <button class="nav-item" data-page="capabilities"><span class="idx">07</span><span class="nav-label">模型能力</span></button>
-      <button class="nav-item" data-page="audit"><span class="idx">08</span><span class="nav-label">审计日志</span></button>
-      <button class="nav-item" data-page="settings"><span class="idx">09</span><span class="nav-label">平台设置</span></button>
+      <button class="nav-item" data-page="memory"><span class="idx">07</span><span class="nav-label">模型记忆</span></button>
+      <button class="nav-item" data-page="capabilities"><span class="idx">08</span><span class="nav-label">模型能力</span></button>
+      <button class="nav-item" data-page="audit"><span class="idx">09</span><span class="nav-label">审计日志</span></button>
+      <button class="nav-item" data-page="settings"><span class="idx">10</span><span class="nav-label">平台设置</span></button>
     </nav>
     <div class="side-foot">
       <div class="side-user">
@@ -160,6 +161,7 @@
           <section class="duo-lane" data-lane="a">
             <div class="duo-lane-head">
               <select class="input duo-model" id="duo-a-model" aria-label="左栏模型"></select>
+              <select class="input duo-memory" id="duo-a-memory" aria-label="左栏记忆" title="这一栏用哪份模型记忆"></select>
               <span class="duo-state" id="duo-a-state">选模型</span>
             </div>
             <div class="chat-stream duo-stream" id="duo-a-stream">
@@ -189,6 +191,7 @@
           <section class="duo-lane" data-lane="b">
             <div class="duo-lane-head">
               <select class="input duo-model" id="duo-b-model" aria-label="右栏模型"></select>
+              <select class="input duo-memory" id="duo-b-memory" aria-label="右栏记忆" title="这一栏用哪份模型记忆"></select>
               <span class="duo-state" id="duo-b-state">选模型</span>
             </div>
             <div class="chat-stream duo-stream" id="duo-b-stream">
@@ -445,7 +448,26 @@
       </div>
     </section>
 
-    <!-- 07 模型能力 -->
+    <!-- 07 模型记忆 -->
+    <section class="page hidden" id="page-memory">
+      <div class="page-head">
+        <div><h1>模型记忆</h1><p>一个模型一份长期记忆。两个模型同时干活时各读各的、互不串味；在哪一栏干活，就在那一栏顶部选这次用哪份。</p></div>
+        <div class="actions">
+          <button class="btn ghost" id="memory-refresh">刷新</button>
+          <button class="btn primary" id="memory-new">新建记忆</button>
+        </div>
+      </div>
+      <div class="memory-grid" id="memory-list"></div>
+      <div class="panel memory-files-panel hidden" id="memory-files-panel">
+        <div class="panel-head">
+          <span id="memory-files-title">目录内容</span>
+          <button class="btn ghost small" id="memory-files-close">收起</button>
+        </div>
+        <div class="memory-files" id="memory-files"></div>
+      </div>
+    </section>
+
+    <!-- 08 模型能力 -->
     <section class="page hidden" id="page-capabilities">
       <div class="page-head">
         <div><h1>模型能力</h1><p>勾选大模型可以执行的测试能力，用右侧滑块给每一项设 1-5 的权重（默认 5），还可以给每一项写「用户提示」——模型测这一项之前必须先读完、照着做，不照做就不算测过。「自动渗透」默认关闭：关着只测勾选并启用的类型，打开后清单外的漏洞类型也会按目标暴露面一起测。AI 先分析目标前端代码，再按权重从高到低安排测试顺序，直到每一项都有结论才算测完。</p></div>
@@ -565,7 +587,7 @@
 
 <div id="modal-root"></div>
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=20261126g"></script>
-<script src="/static/duo.js?v=20261126g"></script>
+<script src="/static/app.js?v=20261126j"></script>
+<script src="/static/duo.js?v=20261126j"></script>
 </body>
 </html>

@@ -803,6 +803,43 @@ body.chat-page .topbar { display: none; }
 
 /* ---------- forms ---------- */
 .form-grid { display: grid; gap: 14px; }
+/* ---------- 模型记忆 ---------- */
+.memory-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.memory-card {
+  border: 1px solid var(--line); background: var(--panel); padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 9px; position: relative; min-height: 158px;
+}
+.memory-card.default { border-color: var(--accent-line); }
+.memory-card.default::before {
+  content: ""; position: absolute; top: 0; left: 0; width: 26px; height: 1px;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);
+}
+.memory-head { display: flex; align-items: center; gap: 8px; }
+.memory-head strong { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.memory-tag {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .06em;
+  padding: 1px 6px; border: 1px solid var(--line-strong); color: var(--muted);
+}
+.memory-tag.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.memory-dir {
+  font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+  word-break: break-all; line-height: 1.5;
+}
+.memory-meta { font-size: 11.5px; color: var(--dim); }
+.memory-note { font-size: 11.5px; color: var(--muted); line-height: 1.6; }
+.memory-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+.memory-files-panel { margin-top: 14px; }
+.memory-files { padding: 6px 16px 14px; display: grid; gap: 4px; max-height: 320px; overflow-y: auto; }
+.memory-file {
+  display: flex; justify-content: space-between; gap: 12px;
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  border-bottom: 1px dashed var(--line); padding: 5px 0;
+}
+/* 文件名走正文字体：等宽字体里中文会掉到很暗的回退字形，看着像空白 */
+.memory-file span:first-child { color: var(--text); font-family: var(--sans); font-size: 12px; }
+.memory-file span:last-child { color: var(--dim); flex: none; }
+.memory-empty { color: var(--dim); font-size: 12px; padding: 10px 0; }
+
 .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .settings-grid .full { grid-column: 1 / -1; }
 .notice {
@@ -938,6 +975,7 @@ body.chat-page .topbar { display: none; }
 @media (max-width: 1180px) {
   .stat-grid { grid-template-columns: repeat(3, 1fr); }
   .connector-grid { grid-template-columns: repeat(2, 1fr); }
+  .memory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* 窗口不够宽时先收起提问导航，别把对话区挤成一条缝 */
   #page-chat .chat-layout { grid-template-columns: 220px minmax(0, 1fr); }
@@ -956,6 +994,7 @@ body.chat-page .topbar { display: none; }
   .grid-2, .settings-grid { grid-template-columns: 1fr; }
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .connector-grid { grid-template-columns: 1fr; }
+  .memory-grid { grid-template-columns: 1fr; }
   .crumb-sub { display: none; }
   #page-chat .chat-layout { grid-template-columns: 1fr; height: auto; }
   #page-chat .chat-layout .chat-sessions { max-height: none; }
@@ -1488,6 +1527,8 @@ td.mono-cell, td .mono { font-size: 14px; }
   border-bottom: 1px solid var(--line);
 }
 .duo-model { flex: 1; min-width: 0; font-size: 12.5px; height: 30px; }
+/* 记忆下拉比模型窄：它是「读哪份笔记」，不需要占满一整行 */
+.duo-memory { width: 104px; flex: none; font-size: 12px; height: 30px; padding: 0 6px; color: var(--muted); }
 .duo-state {
   font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em;
   padding: 2px 8px; border: 1px solid var(--line-strong); color: var(--muted);

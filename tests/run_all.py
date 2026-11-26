@@ -23,6 +23,7 @@ CASES = [
     ("接口层冒烟", "tests/test_api_smoke.py"),
     ("记忆联调（按记忆干活）", "tests/test_memory_worker.py"),
     ("双模型协同", "tests/test_duo_pairs.py"),
+    ("模型记忆空间", "tests/test_memory_spaces.py"),
 ]
 
 
