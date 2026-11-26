@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 import zipfile
+from contextvars import ContextVar
 from pathlib import Path
 
 from ..config import env
@@ -27,6 +28,18 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".ti
 
 SCOPE_LABELS = {"work": "工作目录", "memory": "记忆目录"}
 
+# 当前这次工具调用属于哪条会话。放在这里而不是 agent 里：目录解析要用它
+# 判断「这条会话有没有自己的共享目录」（双模型协同就是这种情况）。
+TOOL_SESSION: ContextVar[int] = ContextVar("k7so_tool_session", default=0)
+
+
+def bind_tool_session(session_id: int):
+    return TOOL_SESSION.set(int(session_id or 0))
+
+
+def current_tool_session() -> int:
+    return int(TOOL_SESSION.get() or 0)
+
 
 class WorkspaceError(Exception):
     """工作目录未配置或目标路径越界。"""
@@ -38,6 +51,16 @@ def memory_path() -> Path | None:
 
 
 def work_dir() -> Path | None:
+    """这条会话的工作目录：双模型协同优先用配对里配的共享目录。"""
+    # 局部导入：pairs 依赖 db，和 workspace 没有循环；放函数里省得启动就加载
+    try:
+        from .pairs import workdir_for_session
+
+        override = workdir_for_session(current_tool_session())
+        if override is not None:
+            return override
+    except Exception:  # 目录解析不能因为协同模块出问题就整体不可用
+        pass
     value = (get_settings().get("work_dir") or "").strip()
     return Path(value).expanduser() if value else None
 

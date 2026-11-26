@@ -36,6 +36,8 @@ from .capabilities import (
     weighted_items,
 )
 from . import coverage
+from . import pairs
+from . import shared
 from .watchdog import STALL_SECONDS, StepStalled, iter_with_watchdog, stall_message
 from .shell import (
     blocked_reason as shell_blocked_reason,
@@ -60,6 +62,8 @@ from .workspace import (
     read_memory,
     resolve_doc,
     resolve_path,
+    TOOL_SESSION as _TOOL_SESSION,
+    bind_tool_session,
     work_dir,
 )
 
@@ -92,7 +96,7 @@ VALID_FINDING_STATUS = ("open", "confirmed", "fixed", "accepted", "false_positiv
 # 工具执行时所在的会话：report_capability / record_finding 要把结论记到这本账上，
 # 而工具签名只有 (args, username)，所以用 ContextVar 把会话带进去
 # （asyncio.to_thread 会复制当前 context，线程里也读得到）。
-_TOOL_SESSION: ContextVar[int] = ContextVar("k7so_tool_session", default=0)
+# 变量本身定义在 workspace：目录解析也要靠它判断共享目录，不能两边各存一份。
 
 # 本会话归档过哪些漏洞：用户要求「最后的结果要把每一个漏洞的标题、请求包、响应包
 # 在控制台写出来」，模型写不写全由平台兜底——收尾时按这份清单核对，缺的补上。
@@ -372,7 +376,7 @@ def _same_domain(left: str, right: str) -> bool:
 
 def set_tool_session(session_id: int):
     """给「不在 run_agent 里」的工具调用（比如确认卡片触发的执行）补上会话上下文。"""
-    return _TOOL_SESSION.set(int(session_id or 0))
+    return bind_tool_session(session_id)
 
 
 @contextmanager
@@ -498,6 +502,7 @@ ACTIVITY_HINTS: dict[str, str] = {
     "run_shell": "正在执行命令",
     "run_python": "正在运行脚本",
     "http_request": "正在发送请求",
+    "talk_to_peer": "正在和同伴对齐",
 }
 
 # 兜底进度文案：模型没写"已…接下来…"时，用这个把每一步的结论说清楚
@@ -524,6 +529,7 @@ PROGRESS_DONE: dict[str, str] = {
     "run_shell": "已执行命令",
     "run_python": "已运行脚本",
     "http_request": "已收到响应",
+    "talk_to_peer": "已把消息发给同伴",
 }
 
 # 内部预检类工具：属于模型自己的准备工作，不需要占用用户的注意力
@@ -1084,6 +1090,30 @@ TOOL_SPECS: list[dict[str, Any]] = [
                     },
                 },
                 "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "talk_to_peer",
+            "description": (
+                "双模型协同模式下，给另一个模型发一句话（它会以「同伴」身份看到）。"
+                "用于分工、交接产物、纠正对方的结论、汇合结果。只在确有必要时用，不要客套。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "要说的话，讲清要它做什么、产物放哪个文件、什么时候要；不超过 1200 字",
+                    },
+                    "wake": {
+                        "type": "boolean",
+                        "description": "对方空闲时是否叫它起来处理这条消息，默认 true；只是同步进度就设 false",
+                    },
+                },
+                "required": ["text"],
             },
         },
     },
@@ -2960,6 +2990,46 @@ def _tool_run_python(args: dict, username: str) -> dict:
     return result
 
 
+def _tool_talk_to_peer(args: dict, username: str) -> dict:
+    """双模型协同：把一句话送给另一个模型，必要时叫它起来干活。
+
+    三条路径，优先级从高到低：
+    1. 对方正在跑 → 作为插话立刻送达；
+    2. 对方空闲、还有唤醒额度 → 由 API 层起一轮，把这句话交给它；
+    3. 都没成 → 消息留在协同记录里，对方下一轮开工时会看到。
+    """
+    session_id = int(_TOOL_SESSION.get() or 0)
+    pair = pairs.pair_for_session(session_id) if session_id else None
+    if not pair:
+        return {
+            "ok": False,
+            "error": "当前不是双模型协同会话，没有可以对话的同伴；单模型会话里直接用正文说清即可",
+        }
+    text = str(args.get("text") or "").strip()
+    if not text:
+        return {"ok": False, "error": "text 不能为空"}
+    lane = pairs.lane_of_session(session_id) or "a"
+    note = pairs.add_note(pair, lane, text)
+    peer = pairs.peer_session(pair, lane)
+
+    live = push_interjection(peer, f"【同伴模型】{text}")
+    woke = False
+    if live:
+        pairs.mark_delivered(int(note["id"]))
+    elif bool(args.get("wake", True)):
+        if pairs.take_budget(int(pair["id"])) and _PEER_WAKE_HOOK is not None:
+            try:
+                woke = bool(_PEER_WAKE_HOOK(peer, username, text))
+            except Exception:  # 叫不醒不算失败，消息已经落库
+                woke = False
+
+    audit(username, "peer_note", f"协同消息 → 同伴（{'已送达' if live else '已排队'}）")
+    result = {"ok": True, "note_id": int(note["id"]), "delivered": bool(live), "woke_peer": bool(woke)}
+    if not live and not woke:
+        result["hint"] = "对方这轮没在跑、唤醒额度也用完了：消息已进协同记录，对方下一轮开工时会看到"
+    return result
+
+
 def _tool_http_request(args: dict, username: str) -> dict:
     url = str(args.get("url") or "").strip()
     if not url:
@@ -3153,6 +3223,7 @@ _HANDLERS = {
     "run_shell": _tool_run_shell,
     "run_python": _tool_run_python,
     "http_request": _tool_http_request,
+    "talk_to_peer": _tool_talk_to_peer,
 }
 
 
@@ -3528,6 +3599,16 @@ def clear_auto_stops() -> None:
     平台仍然认为「这个会话被他叫停过」，于是第一轮结束就收手——看起来就是「开了也不跑」。
     """
     _AUTO_STOP.clear()
+
+
+# 双模型协同：叫醒同伴需要起一轮 Agent，这属于 API 层的活；engine 不反向依赖 api，
+# 所以由 chat.py 在加载时把钩子挂进来。
+_PEER_WAKE_HOOK: Any = None
+
+
+def set_peer_wake_hook(hook) -> None:
+    global _PEER_WAKE_HOOK
+    _PEER_WAKE_HOOK = hook
 
 
 def push_interjection(session_id: int, text: str) -> bool:
@@ -4688,6 +4769,17 @@ async def _run_agent(
         {"role": "system", "content": _workspace_context()},
         {"role": "system", "content": capabilities_context()},
     ]
+    # 双模型协同：告诉它同伴是谁、共享目录在哪；再把对方刚说的话带进来
+    pair_prompt = pairs.prompt_block(session_id)
+    if pair_prompt:
+        messages.append({"role": "system", "content": pair_prompt})
+        peer_words = pairs.notes_block(session_id)
+        if peer_words:
+            messages.append({"role": "system", "content": peer_words})
+        # 同伴的进度与共享目录的变动：每轮开工前都摆一次，人不用问、模型不用猜
+        peer_state = shared.peer_block(session_id)
+        if peer_state:
+            messages.append({"role": "system", "content": peer_state})
     # 能力覆盖台账：勾了哪些、验了几项、还差哪些——每轮都摆出来，模型不用猜
     if not asking:
         messages.append(

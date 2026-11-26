@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from ..db import db, get_settings, now_iso, set_settings
-from ..engine import coverage
+from ..db import audit, db, get_settings, now_iso, set_settings
+from ..engine import coverage, pairs, shared
 from ..engine.agent import (
     BIG_RESULT_TOOLS,
     LARGE_RESULT_CHARS,
@@ -37,6 +37,7 @@ from ..engine.agent import (
     push_interjection,
     ready_providers,
     run_agent,
+    set_peer_wake_hook,
     set_tool_session,
     tool_session,
 )
@@ -298,7 +299,8 @@ async def list_sessions(user=Depends(get_current_user)):
             """SELECT s.id, s.title, s.created_at, s.updated_at,
                       (SELECT COUNT(*) FROM chat_messages m
                         WHERE m.session_id=s.id AND m.role IN ('user','assistant')) AS message_count
-               FROM chat_sessions s WHERE s.username=? ORDER BY s.updated_at DESC, s.id DESC LIMIT 50""",
+               FROM chat_sessions s WHERE s.username=? AND COALESCE(s.pair_id, 0)=0
+               ORDER BY s.updated_at DESC, s.id DESC LIMIT 50""",
             (username,),
         ).fetchall()
     return [dict(r) for r in rows]
@@ -692,6 +694,18 @@ async def _auto_loop(session_id: int, username: str, provider: str):
                     cancelled = True
                 elif kind == "error":
                     failed = True
+                elif kind == "progress":
+                    # 双模型协同时，把每一步落到共享目录的进度文件里：
+                    # 同伴下一轮就能读到，不用互相问「你做到哪了」
+                    shared.log(session_id, "progress", str(event.get("content") or ""))
+                elif kind == "finding":
+                    card = event.get("finding") or {}
+                    shared.log(
+                        session_id,
+                        "finding",
+                        f"{card.get('severity') or ''} {card.get('title') or ''}".strip()
+                        + (f" · {card.get('url')}" if card.get("url") else ""),
+                    )
                 yield event
         except asyncio.CancelledError:
             # 用户点了停止 / 平台要开新一批：这是主动打断，不能当成「接口报错」去重试
@@ -886,3 +900,254 @@ async def decide_pending_action(
     session_id = int(action["session_id"])
     run = start_run(session_id, _decide_events(action, payload.approve, payload.provider, username))
     return _sse_stream(run, 0)
+
+
+# ---------------- 双模型协同 ----------------
+#
+# 两条会话各自跑自己的 Agent（工具、权限、确认卡、能力台账、SSE 全部照旧），
+# 配对只负责「绑在一起 + 共享目录 + 一条对话通道 + 唤醒预算」。
+# 前端左右两栏各连一条 /sessions/{id}/stream，互不影响，也不会互相抢事件。
+
+class PairIn(BaseModel):
+    title: str = ""
+    provider_a: str = ""
+    provider_b: str = ""
+    workdir: str = ""
+
+
+class PairSayIn(BaseModel):
+    lane: str = "both"
+    content: str = Field(min_length=1, max_length=4000)
+    provider: str = ""
+
+
+# 唤醒同伴要起一轮 Agent，必须回到事件循环里做；工具在 worker 线程执行，
+# 所以这里留一个循环引用，由请求进来时捕获。
+_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _pair_of(pair_id: int, username: str) -> dict:
+    pair = pairs.get_pair(int(pair_id))
+    if not pair:
+        raise HTTPException(status_code=404, detail="协同会话不存在")
+    if pair.get("username") and pair["username"] != username:
+        raise HTTPException(status_code=403, detail="无权访问该协同会话")
+    return pair
+
+
+def _lane_sessions(pair: dict) -> dict[str, int]:
+    return {"a": int(pair["session_a"]), "b": int(pair["session_b"])}
+
+
+def _wake_peer(session_id: int, username: str, text: str) -> bool:
+    """同伴空闲时叫它起来处理一条协同消息（只跑一轮，不接龙）。"""
+    if _LOOP is None or _LOOP.is_closed():
+        return False
+    if agent_running(int(session_id)):
+        return False
+
+    def start() -> None:
+        if agent_running(int(session_id)):
+            return
+        try:
+            start_run(int(session_id), _auto_loop(int(session_id), username, ""))
+        except Exception:  # 起不来就只留消息，别把发消息这一步也搞挂
+            pass
+
+    _LOOP.call_soon_threadsafe(start)
+    return True
+
+
+set_peer_wake_hook(_wake_peer)
+
+
+@router.post("/pairs")
+async def create_pair(payload: PairIn, user=Depends(get_current_user)):
+    """建一对协同会话：左右各一个模型，共用一个工作目录。"""
+    global _LOOP
+    _LOOP = asyncio.get_running_loop()
+    username = user.get("u", "")
+    a = (payload.provider_a or "").strip()
+    b = (payload.provider_b or "").strip()
+    if not a or not b:
+        raise HTTPException(status_code=400, detail="左右两侧都要选一个模型")
+    if a == b:
+        raise HTTPException(status_code=400, detail="两侧要选不同的大模型，否则协同没有意义")
+    ready = {str(item.get("key") or "") for item in ready_providers()}
+    lacking = [key for key in (a, b) if key not in ready]
+    if lacking:
+        raise HTTPException(
+            status_code=400,
+            detail=f"模型还没配好：{'、'.join(lacking)}；先到「API 中心」填密钥并点一次测试",
+        )
+    workdir = (payload.workdir or "").strip()
+    if workdir:
+        from pathlib import Path
+
+        try:
+            Path(workdir).expanduser().mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"工作目录不可用：{exc}") from exc
+    title = payload.title.strip()[:40] or "双模型协同"
+    pair = pairs.create_pair(username, title, a, b, workdir)
+    pairs.reset_budget(int(pair["id"]), pairs.DEFAULT_PEER_BUDGET)
+    audit(username, "pair_create", f"建立双模型协同：{a} + {b}（目录 {workdir or '默认'}）")
+    return pairs.get_pair(int(pair["id"])) or pair
+
+
+@router.get("/pairs")
+async def list_pairs(user=Depends(get_current_user)):
+    return pairs.list_pairs(user.get("u", ""))
+
+
+@router.get("/pairs/{pair_id}")
+async def get_pair_detail(pair_id: int, user=Depends(get_current_user)):
+    """一次把两栏都取回来：各自的会话内容、是否在跑、待确认与选择题，外加协同记录。"""
+    username = user.get("u", "")
+    pair = _pair_of(pair_id, username)
+    lanes: dict[str, Any] = {}
+    for lane, session_id in _lane_sessions(pair).items():
+        lanes[lane] = await get_session(session_id, {"u": username})
+        lanes[lane]["provider"] = pair.get("model_a") if lane == "a" else pair.get("model_b")
+    return {
+        "pair": pair,
+        "lanes": lanes,
+        "names": {
+            "a": _model_label(pair.get("model_a")),
+            "b": _model_label(pair.get("model_b")),
+        },
+        "notes": pairs.notes(int(pair["id"]), 0, 500),
+        "budget": int(pair.get("peer_budget") or 0),
+    }
+
+
+def _model_label(key: str) -> str:
+    value = str(key or "").strip()
+    if not value:
+        return ""
+    with db() as conn:
+        row = conn.execute("SELECT name FROM connectors WHERE key=?", (value,)).fetchone()
+    return str(row["name"] or value) if row else value
+
+
+class PairPatchIn(BaseModel):
+    workdir: str = ""
+
+
+@router.patch("/pairs/{pair_id}")
+async def patch_pair(pair_id: int, payload: PairPatchIn, user=Depends(get_current_user)):
+    """改共享目录：两个模型下一轮就落在新目录里干活。"""
+    username = user.get("u", "")
+    pair = _pair_of(pair_id, username)
+    try:
+        updated = pairs.set_workdir(int(pair["id"]), payload.workdir)
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"工作目录不可用：{exc}") from exc
+    audit(username, "pair_workdir", f"协同 #{pair_id} 共享目录改为 {payload.workdir or '默认'}")
+    return updated or pair
+
+
+@router.get("/pairs/{pair_id}/notes")
+async def pair_notes(pair_id: int, after: int = 0, user=Depends(get_current_user)):
+    """协同记录的增量拉取：前端每隔一两秒取一次，比另开一条 SSE 省事。"""
+    pair = _pair_of(pair_id, user.get("u", ""))
+    items = pairs.notes(int(pair["id"]), int(after), 300)
+    return {
+        "notes": items,
+        "last": int(items[-1]["id"]) if items else int(after),
+        "budget": int(pair.get("peer_budget") or 0),
+        # 共享目录的实时清单：谁刚写了什么，界面和模型看到的是同一份
+        "files": shared.tree(int(pair["session_a"])),
+        "running": {
+            "a": agent_running(int(pair["session_a"])),
+            "b": agent_running(int(pair["session_b"])),
+        },
+    }
+
+
+@router.post("/pairs/{pair_id}/say")
+async def pair_say(pair_id: int, payload: PairSayIn, user=Depends(get_current_user)):
+    """把一句话同时（或单独）下发给左右两栏，各自起一轮。"""
+    global _LOOP
+    _LOOP = asyncio.get_running_loop()
+    username = user.get("u", "")
+    pair = _pair_of(pair_id, username)
+    lane = (payload.lane or "both").strip().lower()
+    if lane not in ("a", "b", "both"):
+        raise HTTPException(status_code=400, detail="lane 只能是 a / b / both")
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="消息不能为空")
+
+    targets = ["a", "b"] if lane == "both" else [lane]
+    sessions = _lane_sessions(pair)
+    # 用户每次下发任务，重置互相唤醒的额度：一轮任务内够分工与汇合，又不会无限接龙
+    pairs.reset_budget(int(pair["id"]), pairs.DEFAULT_PEER_BUDGET)
+    pairs.touch(int(pair["id"]))
+
+    ts = now_iso()
+    started: dict[str, int] = {}
+    for item in targets:
+        session_id = sessions[item]
+        with db() as conn:
+            conn.execute(
+                "INSERT INTO chat_messages (session_id, role, content, created_at) VALUES (?,?,?,?)",
+                (session_id, "user", content, ts),
+            )
+            conn.execute("UPDATE chat_sessions SET updated_at=? WHERE id=?", (ts, session_id))
+        clear_auto_stop(session_id)
+        # 栏里的选择题：用户这句话就是答案
+        for choice in pending_choices(session_id):
+            decide_choice(int(choice["id"]), content)
+        # 栏里挂着待确认的敏感操作：回「确认 / 取消」直接生效，和其他会话一致
+        pending = pending_actions(session_id)
+        if pending:
+            latest = get_action(int(pending[-1]["id"])) or {}
+            if _is_affirmative(content):
+                start_run(session_id, _decide_events(latest, True, payload.provider or "", username))
+                started[item] = session_id
+                continue
+            if any(hint in content.lower() for hint in NEGATIVE_HINTS) and len(content) <= 12:
+                start_run(session_id, _decide_events(latest, False, payload.provider or "", username))
+                started[item] = session_id
+                continue
+        start_run(session_id, _auto_loop(session_id, username, payload.provider or ""))
+        started[item] = session_id
+    audit(username, "pair_say", f"双模型协同下发（{'左右同时' if lane == 'both' else lane.upper() + ' 栏'}）：{content[:40]}")
+    return {"ok": True, "sessions": started, "pair": pair}
+
+
+@router.post("/pairs/{pair_id}/stop")
+async def pair_stop(pair_id: int, user=Depends(get_current_user)):
+    pair = _pair_of(pair_id, user.get("u", ""))
+    stopped: dict[str, bool] = {}
+    for lane, session_id in _lane_sessions(pair).items():
+        hit = cancel_agent(session_id, "协同会话被停止")
+        run = _RUNS.get(int(session_id))
+        if run and run.task and not run.task.done():
+            run.task.cancel()
+            hit = True
+        stopped[lane] = bool(hit)
+    return {"ok": True, "stopped": stopped}
+
+
+@router.delete("/pairs/{pair_id}")
+async def delete_pair(pair_id: int, user=Depends(get_current_user)):
+    username = user.get("u", "")
+    pair = _pair_of(pair_id, username)
+    session_a, session_b = int(pair["session_a"]), int(pair["session_b"])
+    for session_id in (session_a, session_b):
+        run = _RUNS.pop(session_id, None)
+        if run and run.task and not run.task.done():
+            run.task.cancel()
+        cancel_agent(session_id, "协同会话已删除")
+    with db() as conn:
+        for session_id in (session_a, session_b):
+            conn.execute("DELETE FROM chat_messages WHERE session_id=?", (session_id,))
+            conn.execute("DELETE FROM chat_sessions WHERE id=?", (session_id,))
+    pairs.delete_pair(int(pair["id"]))
+    for session_id in (session_a, session_b):
+        shared.reset(session_id)
+        forget_session_findings(session_id)
+    audit(username, "pair_delete", f"删除双模型协同 #{pair_id}")
+    return {"ok": True}

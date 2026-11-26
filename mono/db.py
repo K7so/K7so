@@ -267,6 +267,39 @@ CREATE TABLE IF NOT EXISTS asset_hosts (
 
 CREATE INDEX IF NOT EXISTS idx_asset_hosts_module ON asset_hosts(module_id);
 CREATE INDEX IF NOT EXISTS idx_kit_runs_kit ON kit_runs(kit_id);
+
+-- 双模型协同：一对会话 = 两条普通会话（各自跑自己的 Agent）+ 一份共享工作目录
+CREATE TABLE IF NOT EXISTS chat_pairs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    workdir TEXT NOT NULL DEFAULT '',
+    session_a INTEGER NOT NULL,
+    session_b INTEGER NOT NULL,
+    model_a TEXT NOT NULL DEFAULT '',
+    model_b TEXT NOT NULL DEFAULT '',
+    -- 每次用户下发任务，允许互相唤醒的次数：防止两个模型你来我往把额度烧穿
+    peer_budget INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_pairs_user ON chat_pairs(username, id);
+
+-- 两个模型之间的对话：谁发给谁、说了什么、对方有没有看到
+CREATE TABLE IF NOT EXISTS chat_peer_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pair_id INTEGER NOT NULL,
+    from_lane TEXT NOT NULL DEFAULT 'a',
+    to_lane TEXT NOT NULL DEFAULT 'b',
+    from_session INTEGER NOT NULL DEFAULT 0,
+    to_session INTEGER NOT NULL DEFAULT 0,
+    content TEXT NOT NULL DEFAULT '',
+    -- pending：已入库、对方还没看到；delivered：已塞进对方正在跑的那一轮；read：对方已经据此行动
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    delivered_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_chat_peer_notes_pair ON chat_peer_notes(pair_id, id);
 """
 
 DEFAULT_SETTINGS: dict[str, str] = {
@@ -351,6 +384,21 @@ def _migrate_chat_messages(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE chat_messages ADD COLUMN level TEXT DEFAULT ''")
 
 
+def _migrate_chat_sessions(conn: sqlite3.Connection) -> None:
+    """双模型协同：一条会话要知道自己属于哪个配对、是左栏还是右栏。
+
+    单模型会话这两列留空，老库升级后行为不变。
+    """
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(chat_sessions)").fetchall()}
+    for name, ddl in (
+        ("pair_id", "INTEGER DEFAULT 0"),
+        ("lane", "TEXT DEFAULT ''"),
+    ):
+        if name not in existing:
+            conn.execute(f"ALTER TABLE chat_sessions ADD COLUMN {name} {ddl}")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_pair ON chat_sessions(pair_id)")
+
+
 def _initial_admin_password() -> str:
     """首次启动的管理员口令：环境变量优先，没设就随机生成一个。
 
@@ -391,6 +439,7 @@ def init_db() -> None:
         conn.executescript(SCHEMA)
         _migrate_findings(conn)
         _migrate_chat_messages(conn)
+        _migrate_chat_sessions(conn)
 
         user_count = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
         if user_count == 0:

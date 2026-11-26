@@ -20,9 +20,18 @@ FastAPI + 原生 HTML/CSS/JS + SQLite。运行时只依赖 4 个 Python 包，�
 | **API 中心** | **审计日志** |
 | ![](docs/screenshots/07-connectors.png) | ![](docs/screenshots/08-audit.png) |
 
+双模型协同：左边一个模型、右边一个模型，中间是它们之间的对话。
+
+![](docs/screenshots/09-duo-collab.png)
+
+| **历史配对** | **新建协同** | **单栏视图** |
+| --- | --- | --- |
+| ![](docs/screenshots/10-duo-history.png) | ![](docs/screenshots/11-duo-new.png) | ![](docs/screenshots/12-duo-single.png) |
+
 ## 功能
 
 - **智能工作**　一句「把 example.com 测一遍」就开始。模型自己决定发包顺序，能跑命令、跑脚本、发原始 HTTP 请求，每步留一条进展。
+- **双模型协同**　同一个任务派给两个模型，左右各一栏，互相能看见对方干了什么，也能直接对话分工。共享一个工作目录，进度自动同步。
 - **模型能力**　64 项能力分 7 组，可设 1–5 权重和用户提示。勾了就一定验完，台账没清空这一轮不算结束。
 - **资产监管**　xlsx/docx/pdf/txt/md 直接解析出域名和 IP；子域收集走前缀枚举、DNS 记录、证书日志三条路；模块按月对比新增与消失。
 - **漏洞结果**　按主机名归组，一个站点一行，点开看 URL、说明、请求包、响应包。归档那一刻就推到对话里。
@@ -30,6 +39,17 @@ FastAPI + 原生 HTML/CSS/JS + SQLite。运行时只依赖 4 个 Python 包，�
 - **API 中心**　28 个连接器：15 家大模型、6 家测绘、2 家情报、2 家漏洞平台，外加 Nmap/Nuclei/HTTPX 本地检测。
 - **批量作业**　不对话也能跑：可用性 → 测绘 → 存活与配置 → 端口 → 模板检测 → AI 研判，进度可取消。
 - **审计日志**　操作人、时间、来源、动作、目标、结果全留痕，界面上删不掉。
+
+## 双模型协同
+
+一个任务交给两个模型同时做。左栏一个、右栏一个，中间一栏专门显示它们之间的对话，你不用来回切窗口就能看清它们怎么分工。
+
+- **两条真会话**　配对表把两个会话绑在一起，各自独立跑工具循环、独立流式输出，不共用上下文窗口。两边可以是不同厂商、不同模型，比如左边 DeepSeek 跑接口验证、右边 OpenAI 跑策略梳理。
+- **共享工作目录**　顶栏填一个目录（`保存目录` 记住），两边读写文件、跑命令都落在同一处。谁写了什么，下一轮对方就能看到。
+- **显式对齐**　`talk_to_peer` 工具让一方直接给另一方留话，消息带已读状态进对方上下文。为防止两个模型互相客套形成死循环，每人每轮有唤醒次数上限，顶栏实时显示剩余次数，用户每下发一次就重置。
+- **隐式进度**　两边每产出一条进展或发现，自动追加到共享目录下的 `a.md` / `b.md`。对方下一轮收到的是「同伴最新动作 + 目录自上一轮以来的变动」，不需要另外问。
+- **中间栏**　上半是协同记录，两个模型互发的消息按时间排开，标注谁发给谁、有没有读；下半是输入框，可以只对左说、只对右说，也可以 `同时下发` 给两边。
+- **收口与历史**　`全部停止` 一次停掉两边；`历史记录` 抽屉存着所有旧配对，点开接着聊，也能删。单会话还能切回原来的单栏视图。
 
 ## 快速开始
 
@@ -52,6 +72,8 @@ K7so_ADMIN_PASSWORD='你的口令' python run.py
 
 进去后三步：API 中心填模型 Key 并检测 → 模型能力里勾要测的类型 → 智能工作里输入目标。
 
+想让两个模型一起干，在智能工作页点 `新建协同`，选左右两个模型、填共享目录，之后写任务时选 `同时下发`。
+
 ## 内置工具
 
 | 工具 | 说明 |
@@ -70,8 +92,9 @@ K7so_ADMIN_PASSWORD='你的口令' python run.py
 | `list_connectors` / `test_connector` / `test_all_connectors` | 连接器查询与检测 |
 | `list_dir` / `read_file` / `write_file` | 记忆目录只读、工作目录可写，其余路径拒绝 |
 | `read_memory` / `search_memory` | 分页读记忆、按关键词检索 |
+| `talk_to_peer` | 双模型协同专用：给另一栏的模型留话，排队进对方下一轮上下文 |
 
-共 24 个。破坏性操作在工具层就拦下：格式化、删根目录、关机、改引导、写业务数据、上传可执行文件、压测、爆破、落地后门、内网横向一律拒绝；读凭据和删文件各有一个询问开关。
+共 25 个。破坏性操作在工具层就拦下：格式化、删根目录、关机、改引导、写业务数据、上传可执行文件、压测、爆破、落地后门、内网横向一律拒绝；读凭据和删文件各有一个询问开关。
 
 ## 测试能力
 
@@ -140,23 +163,24 @@ mono/
 ├── api/            接口层：auth / chat / capabilities / assets / kits / findings /
 │                   scans / connectors / reports / dashboard / settings
 ├── engine/         agent（工具循环、提示词、收尾自检）、capabilities、coverage、
-│                   watchdog、shell、scanner、asset_registry、kits、workspace
+│                   watchdog、shell、scanner、asset_registry、kits、workspace、
+│                   pairs（双会话配对与互发消息）、shared（共享目录进度落盘）
 ├── connectors/     连接器适配：llm / recon / platforms / tools
-├── static/         index.html + style.css + app.js
+├── static/         index.html + style.css + app.js + duo.js
 ├── db.py           SQLite 持久层与审计
 ├── security.py     口令哈希、Fernet、会话签名
 └── main.py         FastAPI 装配
 data/               运行时数据，不进仓库
-tests/              1062 项回归测试
+tests/              1152 项回归测试
 ```
 
 ## 测试
 
 ```bash
-python tests/run_all.py     # 1062 项，用临时数据目录，不动 data/
+python tests/run_all.py     # 1152 项，用临时数据目录，不动 data/
 ```
 
-覆盖 agent 主循环、接口边界、设置项是否真生效、文件解析、看门狗、首次启动口令等十个文件。
+覆盖 agent 主循环、双模型协同、接口边界、设置项是否真生效、文件解析、看门狗、首次启动口令等十一个文件。
 
 ## 使用边界
 

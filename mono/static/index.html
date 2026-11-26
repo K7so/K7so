@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>K7so // Agent 自动化渗透测试平台</title>
-<link rel="stylesheet" href="/static/style.css?v=20261124a">
+<link rel="stylesheet" href="/static/style.css?v=20261126a">
 </head>
 <body>
 
@@ -138,76 +138,161 @@
 
     <!-- 智能工作 -->
     <section class="page hidden" id="page-chat">
-      <div class="chat-layout">
-        <aside class="panel chat-sessions">
-          <div class="panel-head">
-            <span>会话记录</span>
-            <span class="hint">HISTORY</span>
+      <!-- 双模型协同：左右两栏各接一个模型，中间是它们之间的对话 -->
+      <div class="duo-shell" id="duo-view">
+        <header class="duo-bar">
+          <div class="duo-bar-left">
+            <button class="btn ghost small" id="duo-history" type="button">历史记录</button>
+            <span class="duo-title" id="duo-title">双模型协同</span>
+            <span class="duo-budget hidden" id="duo-budget" title="两个模型互相叫醒的次数，用完只记账不再打断对方"></span>
           </div>
-          <div id="chat-session-list" class="chat-session-list"></div>
-          <!-- 会话记录下方：自动继续与停止生成同行，其余设置折在下面两行 -->
-          <div class="auto-bar" id="auto-bar">
-            <div class="auto-row">
-              <label class="auto-toggle" title="每轮跑完，平台把下面这句话原样发出去，让模型接着干">
-                <input type="checkbox" id="auto-continue">
-                <span>自动继续</span>
-              </label>
-              <button class="btn ghost small hidden" id="chat-stop" type="button">停止生成</button>
-            </div>
-            <label class="auto-field">
-              <span>预设提示词</span>
-              <input class="input auto-text" id="auto-text" maxlength="200" placeholder="继续" value="继续">
+          <div class="duo-bar-right">
+            <label class="duo-dir" title="两个模型共用这个目录：一个写文件，另一个读得到">
+              <span>共享目录</span>
+              <input class="input" id="duo-workdir" placeholder="例如 D:\work\shop-test">
             </label>
-            <div class="auto-foot">
-              <span class="hint auto-hint" id="auto-hint">跑完一轮就替你发一句 · 不限次数</span>
-              <button class="btn ghost small hidden" id="auto-stop" type="button">停止自动</button>
-            </div>
+            <button class="btn ghost small" id="duo-save-dir" type="button">保存目录</button>
+            <button class="btn ghost small" id="duo-stop" type="button">全部停止</button>
+            <button class="btn primary small" id="duo-new" type="button">新建协同</button>
           </div>
-        </aside>
-        <div class="panel chat-main">
-          <div class="panel-head">
-            <div class="chat-head-title">
-              <span id="chat-title">新会话</span>
-              <span class="cov-chip hidden" id="cov-chip" title="能力覆盖台账：勾选的测试能力验了几项"></span>
+        </header>
+        <div class="duo-body" id="duo-body">
+          <section class="duo-lane" data-lane="a">
+            <div class="duo-lane-head">
+              <select class="input duo-model" id="duo-a-model" aria-label="左栏模型"></select>
+              <span class="duo-state" id="duo-a-state">空闲</span>
             </div>
-            <div class="actions">
-              <select class="input" id="chat-provider"></select>
-              <button class="btn ghost small" id="chat-copy-all">复制对话</button>
-              <button class="btn ghost small" id="chat-new">新会话</button>
+            <div class="chat-stream duo-stream" id="duo-a-stream">
+              <div class="chat-messages" id="duo-a-messages"></div>
             </div>
+            <form class="duo-composer" id="duo-a-form" data-lane="a">
+              <textarea rows="2" id="duo-a-input" placeholder="只交代左栏，例如：你负责跑接口清单"></textarea>
+              <button class="btn primary small" type="submit">发送</button>
+            </form>
+          </section>
+
+          <aside class="duo-peer" id="duo-peer">
+            <div class="duo-peer-head">
+              <span>协同记录</span>
+              <span class="hint" id="duo-peer-count">0 条</span>
+            </div>
+            <div class="duo-files" id="duo-files"></div>
+            <div class="duo-peer-list" id="duo-peer-list">
+              <p class="duo-peer-empty">两个模型互相交代的事会出现在这里：谁让谁去做什么、对方接没接。</p>
+            </div>
+            <form class="duo-peer-composer" id="duo-both-form">
+              <textarea rows="1" id="duo-both-input" placeholder="同一件事同时交给两边，例如：把 shop.example.com 的接口越权过一遍"></textarea>
+              <button class="btn primary small" type="submit">同时下发</button>
+            </form>
+          </aside>
+
+          <section class="duo-lane" data-lane="b">
+            <div class="duo-lane-head">
+              <select class="input duo-model" id="duo-b-model" aria-label="右栏模型"></select>
+              <span class="duo-state" id="duo-b-state">空闲</span>
+            </div>
+            <div class="chat-stream duo-stream" id="duo-b-stream">
+              <div class="chat-messages" id="duo-b-messages"></div>
+            </div>
+            <form class="duo-composer" id="duo-b-form" data-lane="b">
+              <textarea rows="2" id="duo-b-input" placeholder="只交代右栏，例如：你盯配置和权限"></textarea>
+              <button class="btn primary small" type="submit">发送</button>
+            </form>
+          </section>
+
+
+        </div>
+        <div class="duo-blank" id="duo-blank">
+          <div class="duo-blank-inner">
+            <div class="duo-blank-title">两个模型，一个目标</div>
+            <p>左边和右边各选一个大模型，配一个共享目录，然后一起交代任务。它们会各自动手，需要对方配合时互相留言。</p>
+            <p class="hint">现在还没有协同会话，点右上角「新建协同」开始。</p>
           </div>
-          <div class="chat-stream" id="chat-stream">
-            <div id="chat-messages" class="chat-messages">
-              <div class="chat-empty">
-                <div class="chat-empty-title">智能工作 · SMART WORK</div>
-                <p>给它一个域名或 IP，默认就开始找漏洞。</p>
-                <p class="chat-empty-foot">资产测绘 → 能力测试 → 逐条归档请求包与响应包。过程我来处理，只在需要你决策时给选项。</p>
-              </div>
-            </div>
-            <!-- 本会话提问：贴在对话区右缘的点列，鼠标移上去弹面板列出全部提问 -->
-            <aside class="chat-outline" id="chat-outline" aria-label="本会话提问">
-              <div class="chat-outline-head" id="chat-outline-count" title="本会话提问">0</div>
-              <div id="chat-outline-list" class="chat-outline-list">
-                <p class="chat-outline-empty">暂无提问</p>
-              </div>
-            </aside>
-            <div class="chat-outline-panel hidden" id="chat-outline-panel">
-              <div class="outline-panel-head">
-                <span>本会话提问</span>
-                <span class="hint" id="chat-outline-panel-count">0 条</span>
-              </div>
-              <div class="outline-panel-list" id="chat-outline-panel-list"></div>
-            </div>
-          </div>
-          <form id="chat-form" class="chat-composer">
-            <div class="chat-compose-row">
-              <textarea id="chat-input" rows="2" placeholder="说清你要的结果，例如：把这批资产过一遍，列出必须先修的风险"></textarea>
-              <button class="btn primary chat-send" id="chat-send" type="submit">发送</button>
-            </div>
-            <span class="hint chat-compose-hint" id="chat-compose-hint">Enter 发送 · Shift+Enter 换行</span>
-          </form>
         </div>
       </div>
+
+      <!-- 单模型会话：从历史里打开时切到这里，布局与原来一致 -->
+        <div class="chat-layout hidden" id="chat-layout">
+          <aside class="panel chat-sessions">
+            <div class="panel-head">
+              <span>会话记录</span>
+              <span class="hint">HISTORY</span>
+            </div>
+            <div id="chat-session-list" class="chat-session-list"></div>
+            <!-- 会话记录下方：自动继续与停止生成同行，其余设置折在下面两行 -->
+            <div class="auto-bar" id="auto-bar">
+              <div class="auto-row">
+                <label class="auto-toggle" title="每轮跑完，平台把下面这句话原样发出去，让模型接着干">
+                  <input type="checkbox" id="auto-continue">
+                  <span>自动继续</span>
+                </label>
+                <button class="btn ghost small hidden" id="chat-stop" type="button">停止生成</button>
+              </div>
+              <label class="auto-field">
+                <span>预设提示词</span>
+                <input class="input auto-text" id="auto-text" maxlength="200" placeholder="继续" value="继续">
+              </label>
+              <div class="auto-foot">
+                <span class="hint auto-hint" id="auto-hint">跑完一轮就替你发一句 · 不限次数</span>
+                <button class="btn ghost small hidden" id="auto-stop" type="button">停止自动</button>
+              </div>
+            </div>
+          </aside>
+          <div class="panel chat-main">
+            <div class="panel-head">
+              <div class="chat-head-title">
+                <span id="chat-title">新会话</span>
+                <span class="cov-chip hidden" id="cov-chip" title="能力覆盖台账：勾选的测试能力验了几项"></span>
+              </div>
+              <div class="actions">
+                <select class="input" id="chat-provider"></select>
+                <button class="btn ghost small" id="chat-copy-all">复制对话</button>
+                <button class="btn ghost small" id="chat-new">新会话</button>
+                <button class="btn ghost small" id="chat-back-duo">返回协同</button>
+              </div>
+            </div>
+            <div class="chat-stream" id="chat-stream">
+              <div id="chat-messages" class="chat-messages">
+                <div class="chat-empty">
+                  <div class="chat-empty-title">智能工作 · SMART WORK</div>
+                  <p>给它一个域名或 IP，默认就开始找漏洞。</p>
+                  <p class="chat-empty-foot">资产测绘 → 能力测试 → 逐条归档请求包与响应包。过程我来处理，只在需要你决策时给选项。</p>
+                </div>
+              </div>
+              <!-- 本会话提问：贴在对话区右缘的点列，鼠标移上去弹面板列出全部提问 -->
+              <aside class="chat-outline" id="chat-outline" aria-label="本会话提问">
+                <div class="chat-outline-head" id="chat-outline-count" title="本会话提问">0</div>
+                <div id="chat-outline-list" class="chat-outline-list">
+                  <p class="chat-outline-empty">暂无提问</p>
+                </div>
+              </aside>
+              <div class="chat-outline-panel hidden" id="chat-outline-panel">
+                <div class="outline-panel-head">
+                  <span>本会话提问</span>
+                  <span class="hint" id="chat-outline-panel-count">0 条</span>
+                </div>
+                <div class="outline-panel-list" id="chat-outline-panel-list"></div>
+              </div>
+            </div>
+            <form id="chat-form" class="chat-composer">
+              <div class="chat-compose-row">
+                <textarea id="chat-input" rows="2" placeholder="说清你要的结果，例如：把这批资产过一遍，列出必须先修的风险"></textarea>
+                <button class="btn primary chat-send" id="chat-send" type="submit">发送</button>
+              </div>
+              <span class="hint chat-compose-hint" id="chat-compose-hint">Enter 发送 · Shift+Enter 换行</span>
+            </form>
+          </div>
+        </div>
+    
+
+      <!-- 历史记录：协同会话与单模型会话都在这里 -->
+      <aside class="history-drawer" id="history-drawer">
+        <div class="history-head">
+          <span>历史记录</span>
+          <button class="btn ghost small" id="history-close" type="button">关闭</button>
+        </div>
+        <div class="history-list" id="history-list"></div>
+      </aside>
     </section>
 
     <!-- 02 资产监管 -->
@@ -487,6 +572,7 @@
 
 <div id="modal-root"></div>
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=20261124a"></script>
+<script src="/static/app.js?v=20261126a"></script>
+<script src="/static/duo.js?v=20261126a"></script>
 </body>
 </html>

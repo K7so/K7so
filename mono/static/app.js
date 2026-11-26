@@ -332,7 +332,7 @@ async function navigate(page) {
   $("#page-title").textContent = PAGE_TITLES[page] || page;
   try {
     if (page === "dashboard") await loadDashboard();
-    if (page === "chat") await loadChat();
+    if (page === "chat") await duoBoot();
     if (page === "chat") await loadAutoSettings();
     if (page === "assets") await loadAssetModules();
     if (page === "kits") await loadKits();
@@ -2945,6 +2945,8 @@ async function loadChat() {
 }
 
 async function openChatSession(sessionId) {
+  // 单模型会话走原来的布局；双模型那一套交给 duo.js
+  if (typeof duoShowSingle === "function") duoShowSingle();
   // 切会话就等于离开上一件事：先把还在跑的那一轮真正停掉，再切过去
   if (state.chatBusy && Number(sessionId) !== state.chatSessionId) haltCurrentRun();
   clearChatSelection();

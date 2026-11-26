@@ -22,6 +22,7 @@ CASES = [
     ("首次启动不写死口令", "tests/test_first_run.py"),
     ("接口层冒烟", "tests/test_api_smoke.py"),
     ("记忆联调（按记忆干活）", "tests/test_memory_worker.py"),
+    ("双模型协同", "tests/test_duo_pairs.py"),
 ]
 
 
