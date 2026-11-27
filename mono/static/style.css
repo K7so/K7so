@@ -503,12 +503,13 @@ input.cap-slider:focus-visible { box-shadow: 0 0 0 3px rgba(53,214,240,.28); bor
 #page-chat { max-width: none; }
 /* 整页铺满窗口：左列与左侧目录同宽（244），右侧对话区吃满剩余宽度；
    提问点列贴在对话区右缘（见 .chat-stream / .chat-outline） */
-body.chat-page .main { padding: 10px 22px 12px; }
+/* 对话页不留外边距：三栏直接顶到窗口边，横向空间全给内容 */
+body.chat-page .main { padding: 0; }
 /* 对话页不要顶栏：标题已经在协同工具栏里，这一行的高度全让给对话 */
 body.chat-page .topbar { display: none; }
 #page-chat .chat-layout {
   display: grid; grid-template-columns: 244px minmax(0, 1fr); gap: 12px;
-  height: calc(100vh - 34px); min-height: 0;
+  height: 100vh; min-height: 0;
 }
 #page-chat .panel {
   margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 0;
@@ -1490,12 +1491,13 @@ td.mono-cell, td .mono { font-size: 14px; }
    双模型协同：左右两栏 + 中间协同记录 + 历史抽屉
    ============================================================ */
 #page-chat .duo-shell {
-  display: flex; flex-direction: column; gap: 10px;
-  height: calc(100vh - 34px); min-height: 0;
+  display: flex; flex-direction: column; gap: 0;
+  height: 100vh; min-height: 0;
 }
 .duo-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 14px; border: 1px solid var(--line); background: rgba(9,16,24,.92);
+  padding: 10px 14px; border: 0; border-bottom: 1px solid var(--line);
+  background: rgba(9,16,24,.92);
   flex-wrap: wrap;
 }
 .duo-bar-left, .duo-bar-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -1513,11 +1515,15 @@ td.mono-cell, td .mono { font-size: 14px; }
 .duo-body {
   flex: 1; min-height: 0; display: grid;
   grid-template-columns: minmax(0, 1fr) 292px minmax(0, 1fr);
-  gap: 10px;
+  gap: 0;
 }
+/* 两栏紧挨着：相邻边框叠成一条，不要 2px 的双线 */
+.duo-body > * + * { margin-left: -1px; }
+/* 第一栏左边贴着侧栏，那条线由侧栏画过了 */
+.duo-body > .duo-lane:first-child { border-left: 0; }
 .duo-lane {
   display: flex; flex-direction: column; min-width: 0; min-height: 0;
-  border: 1px solid var(--line); background: rgba(6,11,17,.94);
+  border: 1px solid var(--line); border-top: 0; background: rgba(6,11,17,.94);
 }
 .duo-lane-head {
   position: relative;
@@ -1593,7 +1599,7 @@ td.mono-cell, td .mono { font-size: 14px; }
 
 .duo-peer {
   display: flex; flex-direction: column; min-height: 0; overflow: hidden;
-  border: 1px solid var(--line); background: rgba(8,14,21,.94);
+  border: 1px solid var(--line); border-top: 0; background: rgba(8,14,21,.94);
 }
 .duo-peer-head {
   display: flex; align-items: center; justify-content: space-between;

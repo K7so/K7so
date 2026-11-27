@@ -22,7 +22,7 @@ SECRET_PATH = DATA_DIR / ".secret"
 
 APP_NAME = "K7so"
 APP_SUBTITLE = "Agent 渗透测试平台"
-APP_VERSION = "3.7.3"
+APP_VERSION = "3.7.4"
 
 # 默认用普通浏览器 UA：目标是业务系统时，非浏览器指纹容易被 WAF 直接拦掉
 DEFAULT_USER_AGENT = (

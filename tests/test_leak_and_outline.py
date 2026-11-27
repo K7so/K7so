@@ -263,7 +263,7 @@ def test_outline_ui() -> None:
           'class="chat-stream"' in html and html.index('id="chat-messages"') < html.index('id="chat-outline"'))
     check("对话布局是两栏（会话记录 / 对话）", "244px minmax(0, 1fr)" in css and "1fr) 58px" not in css)
     check("点列绝对定位在对话区右缘", ".chat-outline {" in css and "position: absolute" in css)
-    check("整页铺满窗口", "body.chat-page .main" in css and "calc(100vh - 34px)" in css)
+    check("整页铺满窗口", "body.chat-page .main { padding: 0; }" in css and "height: 100vh" in css)
     check("发送与输入框同一行", 'class="chat-compose-row"' in html and ".chat-compose-row { display: flex" in css)
     check("自动继续与停止生成同一行", 'class="auto-row"' in html and 'id="chat-stop"' in html and 'id="auto-stop"' in html)
     check(

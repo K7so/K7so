@@ -310,6 +310,8 @@ check("导航项不再做成大按钮", "padding: 8px 9px; font-size: 12px" in c
 check("侧栏宽度只由一处决定", "262px" not in css and css.count("grid-template-columns: 132px") == 1)
 check("输入框有最小宽度兜底", "min-width: 150px" in css and "min-width: 120px" in css)
 check("协同记录卡片有样式", ".duo-note" in css and ".duo-files" in css)
+check("三栏之间不留缝", "gap: 0;" in css and ".duo-body > * + * { margin-left: -1px; }" in css)
+check("顶边只画一条线", ".duo-lane" in css and "border: 1px solid var(--line); border-top: 0" in css)
 check("栏头有单栏开关", 'id="duo-a-on"' in html and 'id="duo-b-on"' in html)
 check("栏头有设置齿轮", 'id="duo-a-gear"' in html and 'id="duo-b-gear"' in html)
 check("设置面板默认收起", html.count('class="duo-lane-menu hidden"') == 2)
