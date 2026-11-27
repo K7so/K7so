@@ -94,23 +94,23 @@ body::before {
 }
 
 /* ---------- layout ---------- */
-.app { display: grid; grid-template-columns: 152px minmax(0, 1fr); min-height: 100vh; position: relative; z-index: 1; }
+.app { display: grid; grid-template-columns: 132px minmax(0, 1fr); min-height: 100vh; position: relative; z-index: 1; }
 .sidebar {
   border-right: 1px solid var(--line);
   background: rgba(5,10,15,.94);
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; z-index: 20;
 }
-.side-brand { padding: 16px 11px 13px; border-bottom: 1px solid var(--line); }
-.logo { font-family: var(--mono); font-size: 21px; font-weight: 700; letter-spacing: .14em; }
+.side-brand { padding: 14px 10px 11px; border-bottom: 1px solid var(--line); }
+.logo { font-family: var(--mono); font-size: 19px; font-weight: 700; letter-spacing: .14em; }
 .logo span { color: var(--accent); }
-.logo-sub { color: var(--dim); font-family: var(--mono); font-size: 9px; letter-spacing: .3em; margin-top: 4px; }
-.side-nav { padding: 12px 0; flex: 1; overflow-y: auto; }
+.logo-sub { color: var(--dim); font-family: var(--mono); font-size: 8.5px; letter-spacing: .2em; margin-top: 4px; }
+.side-nav { padding: 8px 0; flex: 1; overflow-y: auto; }
 .nav-item {
-  width: 100%; display: flex; align-items: center; gap: 11px;
+  width: 100%; display: flex; align-items: center; gap: 8px;
   background: none; border: 0; border-left: 2px solid transparent;
   color: var(--muted); text-align: left; cursor: pointer;
-  padding: 10px 12px; font-size: 12px; font-family: var(--sans);
+  padding: 8px 9px; font-size: 12px; font-family: var(--sans);
   transition: color .15s, background .15s, border-color .15s;
 }
 .nav-item .idx { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: .06em; }
@@ -121,7 +121,7 @@ body::before {
   background: linear-gradient(90deg, rgba(53,214,240,.15), rgba(53,214,240,.02));
 }
 .nav-item.active .idx { color: var(--accent); }
-.side-foot { border-top: 1px solid var(--line); padding: 12px 11px 14px; display: grid; gap: 12px; }
+.side-foot { border-top: 1px solid var(--line); padding: 10px 9px 12px; display: grid; gap: 10px; }
 .side-user { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; }
 .side-user small { display: block; color: var(--dim); font-size: 9px; letter-spacing: .1em; }
 .side-user strong { font-weight: 500; color: var(--text); }
@@ -1012,9 +1012,9 @@ body { font-size: 16px; }
 .login-error { font-size: 13px; }
 .login-foot { font-size: 12.5px; }
 .login-meta { font-size: 12px; }
-.logo-sub { font-size: 11.5px; }
-.nav-item { font-size: 15px; padding: 12px 14px; gap: 8px; }
-.nav-item .idx { font-size: 11px; }
+.logo-sub { font-size: 9.5px; letter-spacing: .18em; }
+.nav-item { font-size: 13.5px; padding: 9px 9px; gap: 6px; }
+.nav-item .idx { font-size: 10px; }
 .side-user { font-size: 13px; }
 .side-user small { font-size: 11px; }
 .crumb { font-size: 13px; }
@@ -1259,9 +1259,7 @@ td.mono-cell, td .mono { font-size: 14px; }
 .chat-session-del:hover { color: #ff8ba0; border-color: rgba(255,139,160,.4); }
 .hidden { display: none !important; }
 
-@media (min-width: 901px) {
-  .app { grid-template-columns: 262px minmax(0, 1fr); }
-}
+/* 桌面端侧栏宽度由上面的 .app 统一决定，这里不再另设一套，免得两处打架 */
 
 /* ============================================================
    免责声明（登录后强制确认）
