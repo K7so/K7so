@@ -27,6 +27,8 @@ function duoLaneNew(key) {
     typingAt: 0,
     seq: 0,
     running: false,
+    // 这一栏参不参与：关掉就只剩另一栏单模型干活
+    active: true,
     ctrl: null,
     pinned: true,
     paint: 0,
@@ -46,10 +48,135 @@ function duoBudget(count) {
 // 没配模型时把发送口封掉，别让人点了才弹一句「没有可用模型」
 function duoGateSends(ready) {
   const has = ready === undefined ? duoReadyProviders().length > 0 : !!ready;
-  document.querySelectorAll(".duo-composer button, #duo-both-form button").forEach((btn) => {
-    btn.disabled = !has;
-    btn.title = has ? "" : "没有可用模型";
+  ["a", "b"].forEach((key) => {
+    const lane = DUO.lanes[key];
+    const off = !!lane && lane.active === false;
+    const form = document.getElementById(`duo-${key}-form`);
+    if (form) {
+      form.querySelectorAll("button").forEach((btn) => {
+        btn.disabled = !has || off;
+        btn.title = off ? "这一栏已关闭，打开后才能下发" : (has ? "" : "没有可用模型");
+      });
+    }
+    const input = document.getElementById(`duo-${key}-input`);
+    if (input) input.disabled = off;
   });
+  const both = document.querySelector("#duo-both-form button");
+  if (both) {
+    both.disabled = !has;
+    both.title = has ? "" : "没有可用模型";
+  }
+}
+
+/* 单栏开关：关掉就整栏变暗、输入口锁住，只剩另一栏干活 */
+function duoApplyActive(key) {
+  const lane = DUO.lanes[key];
+  if (!lane) return;
+  const off = lane.active === false;
+  const box = document.querySelector(`.duo-lane[data-lane="${key}"]`);
+  if (box) box.classList.toggle("off", off);
+  const input = document.getElementById(`duo-${key}-input`);
+  if (input) input.disabled = off;
+  const toggle = document.getElementById(`duo-${key}-on`);
+  if (toggle) toggle.checked = !off;
+  duoSetState(key);
+}
+
+async function duoSetLaneActive(key, on) {
+  const lane = DUO.lanes[key];
+  if (!lane) return;
+  lane.active = !!on;
+  if (!on && lane.running) await duoStopLane(key).catch(() => {});
+  duoApplyActive(key);
+  if (!DUO.pair) {
+    duoGateSends();
+    return;
+  }
+  try {
+    const pair = await api(`/api/chat/pairs/${DUO.pair.id}`, {
+      method: "PATCH",
+      body: key === "a" ? { active_a: !!on } : { active_b: !!on },
+    });
+    DUO.pair = pair;
+    toast(on ? `${key.toUpperCase()} 栏已开启` : `${key.toUpperCase()} 栏已关闭，只剩另一栏干活`);
+  } catch (error) {
+    lane.active = !on;
+    duoApplyActive(key);
+    toast(error.message, "error");
+  }
+}
+
+/* 清空一栏的对话记录：会话、记忆、工作目录都保留，只是把这一栏翻篇 */
+async function duoClearLane(key) {
+  const lane = DUO.lanes[key];
+  if (!lane) return;
+  if (lane.running) {
+    toast("这一栏还在跑，先点「停这一栏」再清空", "error");
+    return;
+  }
+  if (!confirm(`清空这栏的对话记录？会话、记忆和共享目录都留着，只把消息清掉。`)) return;
+  if (DUO.pair && lane.sessionId) {
+    await api(`/api/chat/sessions/${lane.sessionId}/messages`, { method: "DELETE" });
+  }
+  lane.messages = [];
+  lane.seq = 0;
+  lane.typing = "";
+  lane.pinned = true;
+  duoRender(key, "");
+  duoSetState(key);
+  toast("这一栏已清空");
+}
+
+/* 栏头的齿轮：模型以外的配置都收进它展开的面板，点别处或按 Esc 收起 */
+function duoCloseMenus(except) {
+  ["a", "b"].forEach((key) => {
+    if (key === except) return;
+    const menu = document.getElementById(`duo-${key}-menu`);
+    const gear = document.getElementById(`duo-${key}-gear`);
+    if (menu) menu.classList.add("hidden");
+    if (gear) {
+      gear.classList.remove("on");
+      gear.setAttribute("aria-expanded", "false");
+    }
+  });
+}
+
+function duoToggleMenu(key, on) {
+  const menu = document.getElementById(`duo-${key}-menu`);
+  const gear = document.getElementById(`duo-${key}-gear`);
+  if (!menu) return;
+  const show = on === undefined ? menu.classList.contains("hidden") : !!on;
+  duoCloseMenus(show ? key : "");
+  menu.classList.toggle("hidden", !show);
+  if (gear) {
+    gear.classList.toggle("on", show);
+    gear.setAttribute("aria-expanded", String(show));
+  }
+}
+
+/* 清空中间的协同记录：两栏各自的对话不动 */
+async function duoClearNotes() {
+  if (DUO.pair) {
+    if (!confirm("清空中间的协同记录？两栏各自的对话不受影响。")) return;
+    await api(`/api/chat/pairs/${DUO.pair.id}/notes`, { method: "DELETE" });
+  }
+  DUO.notes = [];
+  DUO.lastNote = 0;
+  duoRenderNotes([]);
+  toast("协同记录已清空");
+}
+
+/* 只停这一栏：另一栏继续跑，不影响它的会话 */
+async function duoStopLane(key) {
+  const lane = DUO.lanes[key];
+  if (!DUO.pair || !lane || !lane.sessionId) return;
+  await api(`/api/chat/pairs/${DUO.pair.id}/stop?lane=${key}`, { method: "POST" });
+  if (lane.ctrl) { lane.ctrl.abort(); lane.ctrl = null; }
+  lane.running = false;
+  lane.typing = "";
+  duoSetState(key);
+  duoRender(key, "");
+  toast(`${key.toUpperCase()} 栏已停止`);
 }
 
 function duoSetState(key) {
@@ -59,9 +186,15 @@ function duoSetState(key) {
   const ready = duoReadyProviders().length > 0;
   duoGateSends(ready);
   const running = !!(lane.sessionId && lane.running);
-  chip.textContent = lane.sessionId
-    ? (running ? "运行中" : "空闲")
-    : (DUO.pair ? "待开工" : "选好就能开始");
+  const off = lane.active === false;
+  chip.textContent = off
+    ? "已关闭"
+    : lane.sessionId
+      ? (running ? "运行中" : "空闲")
+      : (DUO.pair ? "待开工" : "选好就能开始");
+  // 单栏停止按钮只在真跑着的时候露出来
+  const stop = document.getElementById(`duo-${key}-stop`);
+  if (stop) stop.classList.toggle("hidden", !(running && !off));
   // hidden 要跟着 className 一起写：整串覆盖会把隐藏状态冲掉
   chip.className = `duo-state${running ? " on" : ""}${ready ? "" : " hidden"}`;
 }
@@ -586,7 +719,10 @@ function duoDraft() {
     const select = document.getElementById(`duo-${key}-model`);
     lane.provider = select ? select.value : "";
     lane.modelName = select?.selectedOptions[0]?.textContent || "";
+    // 新开一组默认两栏都开；上一组关掉的，这里不继承
+    lane.active = true;
     DUO.lanes[key] = lane;
+    duoApplyActive(key);
     duoSetState(key);
     duoRender(key, "");
   });
@@ -615,6 +751,8 @@ async function duoEnsurePair(text) {
       workdir: dir,
       memory_a: Number(document.getElementById("duo-a-memory")?.value || 0),
       memory_b: Number(document.getElementById("duo-b-memory")?.value || 0),
+      active_a: DUO.lanes.a ? DUO.lanes.a.active !== false : true,
+      active_b: DUO.lanes.b ? DUO.lanes.b.active !== false : true,
     },
   });
   await duoOpenPair(pair.id);
@@ -624,6 +762,13 @@ async function duoEnsurePair(text) {
 async function duoSay(keys, text) {
   const content = String(text || "").trim();
   if (!content) return;
+  const shut = keys.filter((key) => DUO.lanes[key] && DUO.lanes[key].active === false);
+  if (shut.length === keys.length) {
+    toast("这一栏已关闭，先打开再下发", "error");
+    return;
+  }
+  // 混合下发时自动跳过关掉的那一栏，别把话丢进一个不干活的模型
+  keys = keys.filter((key) => !shut.includes(key));
   try {
     await duoEnsurePair(content);
   } catch (error) {
@@ -862,6 +1007,11 @@ async function duoOpenPair(pairId) {
       memorySelect.title = `这一栏读哪份记忆：${(data.memory && data.memory.names && data.memory.names[key]) || "默认记忆"}`;
     }
     lane.sessionId = Number(detail.id || 0);
+    // 这一栏开没开，以配对记录为准
+    const activeKey = key === "a" ? "active_a" : "active_b";
+    lane.active = data.pair[activeKey] === undefined || data.pair[activeKey] === null
+      ? true
+      : !!Number(data.pair[activeKey]);
     // 这一栏用哪个模型，以配对记录为准：建的时候选的、后来换的，都在这里
     lane.provider = String((key === "a" ? data.pair.model_a : data.pair.model_b) || detail.provider || "");
     lane.modelName = (data.names && data.names[key]) || lane.provider || key.toUpperCase();
@@ -873,6 +1023,7 @@ async function duoOpenPair(pairId) {
     if (select && lane.provider) select.value = lane.provider;
     duoStoreModel(key, lane.provider);
     duoRender(key, "bottom");
+    duoApplyActive(key);
     duoSetState(key);
     if (lane.running) duoAttach(key).catch(() => {});
   });
@@ -993,6 +1144,31 @@ document.addEventListener("DOMContentLoaded", () => {
         form.requestSubmit();
       }
     });
+    const gear = document.getElementById(`duo-${key}-gear`);
+    if (gear) {
+      gear.addEventListener("click", (event) => {
+        event.stopPropagation();
+        duoToggleMenu(key);
+      });
+    }
+    const toggle = document.getElementById(`duo-${key}-on`);
+    if (toggle) {
+      toggle.addEventListener("change", () => {
+        duoSetLaneActive(key, toggle.checked).catch((error) => toast(error.message, "error"));
+      });
+    }
+    const stopLane = document.getElementById(`duo-${key}-stop`);
+    if (stopLane) {
+      stopLane.addEventListener("click", () => {
+        duoStopLane(key).catch((error) => toast(error.message, "error"));
+      });
+    }
+    const clearLane = document.getElementById(`duo-${key}-clear`);
+    if (clearLane) {
+      clearLane.addEventListener("click", () => {
+        duoClearLane(key).catch((error) => toast(error.message, "error"));
+      });
+    }
     const select = document.getElementById(`duo-${key}-model`);
     select.addEventListener("change", () => {
       const lane = DUO.lanes[key];
@@ -1011,12 +1187,30 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // 点面板外面 / 按 Esc 收起设置面板
+  document.addEventListener("click", (event) => {
+    if (event.target.closest(".duo-lane-head")) return;
+    duoCloseMenus();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") duoCloseMenus();
+  });
+
+  const clearNotes = document.getElementById("duo-notes-clear");
+  if (clearNotes) {
+    clearNotes.addEventListener("click", () => {
+      duoClearNotes().catch((error) => toast(error.message, "error"));
+    });
+  }
+
   const bothForm = document.getElementById("duo-both-form");
   const bothInput = document.getElementById("duo-both-input");
   if (bothForm && bothInput) {
     bothForm.addEventListener("submit", (event) => {
       event.preventDefault();
-      duoSay(["a", "b"], bothInput.value).then(() => { bothInput.value = ""; }).catch((error) => toast(error.message, "error"));
+      const live = ["a", "b"].filter((key) => DUO.lanes[key] && DUO.lanes[key].active !== false);
+      if (!live.length) { toast("两栏都关着，先打开一栏", "error"); return; }
+      duoSay(live, bothInput.value).then(() => { bothInput.value = ""; }).catch((error) => toast(error.message, "error"));
     });
     bothInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {

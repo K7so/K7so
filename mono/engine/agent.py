@@ -1441,6 +1441,20 @@ def _auto_choice(options: list[dict[str, str]]) -> dict[str, str]:
     return options[0]
 
 
+# 从进度行里认目标：带协议的、裸域名:端口都算；文件扩展名不算目标
+_TARGET_RE = re.compile(
+    r"(?:https?://)?("
+    r"\d{1,3}(?:\.\d{1,3}){3}"          # 纯 IP
+    r"|(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,12}"  # 域名
+    r")(?::(\d{2,5}))?"
+)
+_NOT_TARGETS = {
+    "md", "txt", "json", "py", "js", "ts", "png", "jpg", "jpeg", "gif", "log", "csv",
+    "html", "htm", "pdf", "docx", "xlsx", "pptx", "zip", "gz", "tar", "sh", "bat",
+    "exe", "jar", "conf", "yaml", "yml", "xml", "sql", "bak", "db", "ini", "toml",
+}
+
+
 def _work_digest(session_id: int) -> str:
     """把「这次会话到底做过什么」压成一份台账，每轮都塞给模型。
 
@@ -1454,7 +1468,15 @@ def _work_digest(session_id: int) -> str:
         progress_rows = conn.execute(
             """SELECT content FROM chat_messages
                WHERE session_id=? AND role='progress' AND content <> ''
-               ORDER BY id DESC LIMIT 60""",
+               ORDER BY id DESC LIMIT 120""",
+            (session_id,),
+        ).fetchall()
+        # 「这个会话到底碰过哪些目标」单独查一遍：进度行会被字数预算挤掉，
+        # 但用户问「某某站点你测过没」时，答案必须来自整场会话而不是最近几十条。
+        target_rows = conn.execute(
+            """SELECT content FROM chat_messages
+               WHERE session_id=? AND role='progress' AND content <> ''
+               ORDER BY id DESC LIMIT 600""",
             (session_id,),
         ).fetchall()
         assistant_rows = conn.execute(
@@ -1479,7 +1501,7 @@ def _work_digest(session_id: int) -> str:
         if not line or line in seen:
             continue
         seen.add(line)
-        if used + len(line) > 1800 and steps:
+        if used + len(line) > 2400 and steps:
             break
         steps.append(line)
         used += len(line) + 3
@@ -1495,7 +1517,39 @@ def _work_digest(session_id: int) -> str:
         notes.append(line)
         used += len(line) + 3
 
+    targets: list[str] = []
+    seen_targets: set[str] = set()
+    for row in target_rows:
+        raw_text = str(row["content"] or "")
+        for match in _TARGET_RE.finditer(raw_text):
+            # 界面里的进度会把长域名截成「shop.exam…」：这种残片不是目标
+            tail = raw_text[match.end(): match.end() + 3]
+            if tail.startswith("…") or tail.startswith("..."):
+                continue
+            host = (match.group(1) or "").strip(" .,;()").lower()
+            port = (match.group(2) or "").strip()
+            if not host or host.rsplit(".", 1)[-1] in _NOT_TARGETS:
+                continue
+            if port:
+                host = f"{host}:{port}"
+            if host in seen_targets:
+                continue
+            seen_targets.add(host)
+            targets.append(host)
+            if len(targets) >= 24:
+                break
+        if len(targets) >= 24:
+            break
+
     parts: list[str] = []
+    if targets:
+        # 这一段的用途很直接：用户问「某某测过没」，模型照这里答，不许说「没记录」
+        parts.append(
+            "【本会话接触过的目标（整场累计，出现过的都发包或查过）】\n"
+            + "、".join(targets)
+            + "\n（被问到「这个测过没」时以这里为准：在清单里就是有记录，"
+            "具体做过什么看下面的动作；不在清单里才说没记录。）"
+        )
     if steps:
         parts.append("【本次会话已执行的步骤（按时间先后，取自真实执行记录，可直接引用）】")
         parts.extend(f"- {line}" for line in steps)
@@ -3025,6 +3079,18 @@ def _tool_talk_to_peer(args: dict, username: str) -> dict:
     if not text:
         return {"ok": False, "error": "text 不能为空"}
     lane = pairs.lane_of_session(session_id) or "a"
+    peer_lane = pairs.peer_lane(lane)
+    # 同伴那一栏关着：把话记进协同记录，等它重新打开再看，不唤醒
+    if not pairs.lane_active(pair, peer_lane):
+        note = pairs.add_note(pair, lane, text)
+        audit(username, "peer_note", f"协同消息 → 同伴（{peer_lane.upper()} 栏已关闭，只记账）")
+        return {
+            "ok": True,
+            "note_id": int(note["id"]),
+            "delivered": False,
+            "woke_peer": False,
+            "hint": "对方那一栏现在是关闭状态，消息留在协同记录里，等它打开就能看到",
+        }
     note = pairs.add_note(pair, lane, text)
     peer = pairs.peer_session(pair, lane)
 
@@ -4801,6 +4867,19 @@ async def _run_agent(
     if not asking:
         messages.append(
             {"role": "system", "content": COVERAGE_CONTEXT.format(line=coverage.summary_line(session_id))}
+        )
+    elif coverage.selected_keys():
+        # 提问的轮次不要那四条规矩（会把答案挤掉），但「验了几项、还差哪些」要给它：
+        # 用户问「你测过没有」时，答案得和平台台账对得上
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "【能力覆盖台账·平台实算，不看你自己的回忆】"
+                    f"{coverage.summary_line(session_id)}\n"
+                    "被问到「测过没 / 还差哪几项」照这一行答，不要凭印象说没测过。"
+                ),
+            }
         )
     if history:
         # 台账独立于历史预算：哪怕最早的结论被裁掉，做过什么也始终在上下文里

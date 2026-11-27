@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>K7so // Agent 自动化渗透测试平台</title>
-<link rel="stylesheet" href="/static/style.css?v=20261126j">
+<link rel="stylesheet" href="/static/style.css?v=20261127b">
 </head>
 <body>
 
@@ -29,7 +29,7 @@
       <span>仅限已授权资产的渗透测试</span>
     </div>
   </div>
-  <div class="login-meta">K7so v3.7.0 · AUTHORIZED USE ONLY</div>
+  <div class="login-meta">K7so v3.7.2 · AUTHORIZED USE ONLY</div>
 </div>
 
 <div id="disclaimer-screen" class="login-screen hidden">
@@ -64,11 +64,10 @@
       <button class="nav-item" data-page="kits"><span class="idx">03</span><span class="nav-label">K7so工具</span></button>
       <button class="nav-item" data-page="findings"><span class="idx">04</span><span class="nav-label">漏洞结果</span></button>
       <button class="nav-item" data-page="connectors"><span class="idx">05</span><span class="nav-label">API 中心</span></button>
-      <button class="nav-item" data-page="paths"><span class="idx">06</span><span class="nav-label">目录配置</span></button>
-      <button class="nav-item" data-page="memory"><span class="idx">07</span><span class="nav-label">模型记忆</span></button>
-      <button class="nav-item" data-page="capabilities"><span class="idx">08</span><span class="nav-label">模型能力</span></button>
-      <button class="nav-item" data-page="audit"><span class="idx">09</span><span class="nav-label">审计日志</span></button>
-      <button class="nav-item" data-page="settings"><span class="idx">10</span><span class="nav-label">平台设置</span></button>
+      <button class="nav-item" data-page="paths"><span class="idx">06</span><span class="nav-label">模型记忆</span></button>
+      <button class="nav-item" data-page="capabilities"><span class="idx">07</span><span class="nav-label">模型能力</span></button>
+      <button class="nav-item" data-page="audit"><span class="idx">08</span><span class="nav-label">审计日志</span></button>
+      <button class="nav-item" data-page="settings"><span class="idx">09</span><span class="nav-label">平台设置</span></button>
     </nav>
     <div class="side-foot">
       <div class="side-user">
@@ -161,8 +160,25 @@
           <section class="duo-lane" data-lane="a">
             <div class="duo-lane-head">
               <select class="input duo-model" id="duo-a-model" aria-label="左栏模型"></select>
-              <select class="input duo-memory" id="duo-a-memory" aria-label="左栏记忆" title="这一栏用哪份模型记忆"></select>
               <span class="duo-state" id="duo-a-state">选模型</span>
+              <button class="duo-gear" id="duo-a-gear" type="button" aria-label="左栏设置" aria-expanded="false" title="这一栏的设置：开关 / 记忆 / 停止 / 清空"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              <div class="duo-lane-menu hidden" id="duo-a-menu">
+                <div class="duo-menu-row">
+                  <span>参与协同</span>
+                  <label class="duo-switch" title="关掉这一栏，就只用另一栏单模型干活">
+                    <input type="checkbox" id="duo-a-on" checked>
+                    <span></span>
+                  </label>
+                </div>
+                <div class="duo-menu-row col">
+                  <span>模型记忆</span>
+                  <select class="input duo-memory" id="duo-a-memory" aria-label="左栏记忆" title="这一栏用哪份模型记忆"></select>
+                </div>
+                <div class="duo-menu-actions">
+                  <button class="btn ghost small duo-stop-lane hidden" id="duo-a-stop" type="button" title="只停这一栏，另一栏继续">停这一栏</button>
+                  <button class="btn ghost small" id="duo-a-clear" type="button" title="清空这一栏的对话记录，会话本身保留">清空对话</button>
+                </div>
+              </div>
             </div>
             <div class="chat-stream duo-stream" id="duo-a-stream">
               <div class="chat-messages" id="duo-a-messages"></div>
@@ -177,6 +193,7 @@
             <div class="duo-peer-head">
               <span>协同记录</span>
               <span class="hint" id="duo-peer-count">0 条</span>
+              <button class="btn ghost small" id="duo-notes-clear" type="button" title="只清协同记录，两栏各自的对话不动">清空</button>
             </div>
             <div class="duo-files" id="duo-files"></div>
             <div class="duo-peer-list" id="duo-peer-list">
@@ -191,8 +208,25 @@
           <section class="duo-lane" data-lane="b">
             <div class="duo-lane-head">
               <select class="input duo-model" id="duo-b-model" aria-label="右栏模型"></select>
-              <select class="input duo-memory" id="duo-b-memory" aria-label="右栏记忆" title="这一栏用哪份模型记忆"></select>
               <span class="duo-state" id="duo-b-state">选模型</span>
+              <button class="duo-gear" id="duo-b-gear" type="button" aria-label="右栏设置" aria-expanded="false" title="这一栏的设置：开关 / 记忆 / 停止 / 清空"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+              <div class="duo-lane-menu hidden" id="duo-b-menu">
+                <div class="duo-menu-row">
+                  <span>参与协同</span>
+                  <label class="duo-switch" title="关掉这一栏，就只用另一栏单模型干活">
+                    <input type="checkbox" id="duo-b-on" checked>
+                    <span></span>
+                  </label>
+                </div>
+                <div class="duo-menu-row col">
+                  <span>模型记忆</span>
+                  <select class="input duo-memory" id="duo-b-memory" aria-label="右栏记忆" title="这一栏用哪份模型记忆"></select>
+                </div>
+                <div class="duo-menu-actions">
+                  <button class="btn ghost small duo-stop-lane hidden" id="duo-b-stop" type="button" title="只停这一栏，另一栏继续">停这一栏</button>
+                  <button class="btn ghost small" id="duo-b-clear" type="button" title="清空这一栏的对话记录，会话本身保留">清空对话</button>
+                </div>
+              </div>
             </div>
             <div class="chat-stream duo-stream" id="duo-b-stream">
               <div class="chat-messages" id="duo-b-messages"></div>
@@ -412,46 +446,10 @@
       </details>
     </section>
 
-    <!-- 06 目录配置 -->
+    <!-- 06 模型记忆 -->
     <section class="page hidden" id="page-paths">
       <div class="page-head">
-        <div><h1>目录配置</h1><p>设置 AI 的用户级记忆目录与默认工作目录。记忆会在每次执行任务前注入上下文，AI 也能直接打开目录内的文件来查证。</p></div>
-        <div class="actions"><button class="btn primary" id="paths-save">保存配置</button></div>
-      </div>
-      <div class="settings-grid">
-        <div class="panel">
-          <div class="panel-head"><span>用户级记忆</span><span class="hint">MEMORY</span></div>
-          <div class="form-grid">
-            <label class="field">
-              <span>记忆目录（文件或目录，读 .md / .txt / .json / .yaml）</span>
-              <input id="d-memory-path" placeholder="留空使用平台默认目录 data\memory">
-            </label>
-            <div class="hint" id="d-memory-status">未设置</div>
-            <div class="notice">AI 可以直接打开该目录下的文件（read_file / read_memory），执行任务前也会把内容预载为上下文。目录不存在时保存会自动创建。</div>
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-head"><span>工作目录</span><span class="hint">WORKSPACE</span></div>
-          <div class="form-grid">
-            <label class="field">
-              <span>AI 默认工作目录</span>
-              <input id="d-work-dir" placeholder="留空使用平台默认目录 data\workspace">
-            </label>
-            <div class="hint" id="d-work-status">未设置</div>
-            <div class="notice">AI 的写文件操作被限制在该目录内；读取可同时访问记忆目录。两者之外的路径一律拒绝。</div>
-          </div>
-        </div>
-        <div class="panel full">
-          <div class="panel-head"><span>记忆预览</span><span class="hint">PREVIEW</span></div>
-          <pre class="summary-box" id="d-memory-preview">未读取到记忆内容</pre>
-        </div>
-      </div>
-    </section>
-
-    <!-- 07 模型记忆 -->
-    <section class="page hidden" id="page-memory">
-      <div class="page-head">
-        <div><h1>模型记忆</h1><p>一个模型一份长期记忆。两个模型同时干活时各读各的、互不串味；在哪一栏干活，就在那一栏顶部选这次用哪份。</p></div>
+        <div><h1>模型记忆</h1><p>一个模型一份长期记忆。两个模型同时干活时各读各的、互不串味；在哪一栏干活，就在那一栏顶部选这次用哪份。记忆目录、工作目录和预览收在页面底部的「默认目录」里。</p></div>
         <div class="actions">
           <button class="btn ghost" id="memory-refresh">刷新</button>
           <button class="btn primary" id="memory-new">新建记忆</button>
@@ -465,9 +463,43 @@
         </div>
         <div class="memory-files" id="memory-files"></div>
       </div>
+      <details class="adv-panel">
+        <summary>默认记忆目录 · 工作目录 · 记忆预览</summary>
+        <div class="settings-grid">
+          <div class="panel">
+            <div class="panel-head"><span>默认记忆目录</span><span class="hint">DEFAULT MEMORY</span></div>
+            <div class="form-grid">
+              <label class="field">
+                <span>记忆目录（留空即平台默认的「默认记忆」，读 .md / .txt / .json / .yaml）</span>
+                <input id="d-memory-path" placeholder="留空使用平台默认目录 data\memory">
+              </label>
+              <div class="hint" id="d-memory-status">未设置</div>
+              <div class="notice">没单独建记忆空间的栏就走这份。AI 可以直接打开目录里的文件（read_file / read_memory），执行任务前也会预载为上下文。</div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span>工作目录</span><span class="hint">WORKSPACE</span></div>
+            <div class="form-grid">
+              <label class="field">
+                <span>AI 默认工作目录</span>
+                <input id="d-work-dir" placeholder="留空使用平台默认目录 data\workspace">
+              </label>
+              <div class="hint" id="d-work-status">未设置</div>
+              <div class="notice">AI 的写文件操作被限制在该目录内；读取可同时访问记忆目录。两者之外的路径一律拒绝。</div>
+            </div>
+          </div>
+          <div class="panel full">
+            <div class="panel-head">
+              <span>记忆预览</span>
+              <button class="btn primary small" id="paths-save">保存目录</button>
+            </div>
+            <pre class="summary-box" id="d-memory-preview">未读取到记忆内容</pre>
+          </div>
+        </div>
+      </details>
     </section>
 
-    <!-- 08 模型能力 -->
+    <!-- 07 模型能力 -->
     <section class="page hidden" id="page-capabilities">
       <div class="page-head">
         <div><h1>模型能力</h1><p>勾选大模型可以执行的测试能力，用右侧滑块给每一项设 1-5 的权重（默认 5），还可以给每一项写「用户提示」——模型测这一项之前必须先读完、照着做，不照做就不算测过。「自动渗透」默认关闭：关着只测勾选并启用的类型，打开后清单外的漏洞类型也会按目标暴露面一起测。AI 先分析目标前端代码，再按权重从高到低安排测试顺序，直到每一项都有结论才算测完。</p></div>
@@ -587,7 +619,7 @@
 
 <div id="modal-root"></div>
 <div id="toast" class="toast"></div>
-<script src="/static/app.js?v=20261126j"></script>
-<script src="/static/duo.js?v=20261126j"></script>
+<script src="/static/app.js?v=20261127b"></script>
+<script src="/static/duo.js?v=20261127b"></script>
 </body>
 </html>

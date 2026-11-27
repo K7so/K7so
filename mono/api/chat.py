@@ -373,6 +373,31 @@ async def delete_session(session_id: int, user=Depends(get_current_user)):
     return {"ok": True}
 
 
+@router.delete("/sessions/{session_id}/messages")
+async def clear_session_messages(session_id: int, user=Depends(get_current_user)):
+    """只清这一栏的对话记录：会话本身、配对关系、记忆和工作目录都不动。
+
+    用户要的是「把这一栏翻篇」，不是删会话，所以清完还能接着在同一栏里说话。
+    跑着的时候不让清：正跑着的轮次会把消息再写回来，清不干净。
+    """
+    _session(session_id, user.get("u", ""))
+    if agent_running(int(session_id)):
+        raise HTTPException(status_code=400, detail="这一栏还在跑，先点停止再清空")
+    with db() as conn:
+        cleared = conn.execute(
+            "DELETE FROM chat_messages WHERE session_id=?", (int(session_id),)
+        ).rowcount
+        # 挂着的确认卡片与选择题跟着一起清，否则界面上会留一张点不动的卡
+        conn.execute("DELETE FROM chat_actions WHERE session_id=?", (int(session_id),))
+        conn.execute("DELETE FROM chat_choices WHERE session_id=?", (int(session_id),))
+        conn.execute(
+            "UPDATE chat_sessions SET updated_at=? WHERE id=?", (now_iso(), int(session_id))
+        )
+    forget_session_findings(int(session_id))
+    audit(user.get("u", ""), "chat_clear", f"清空会话 #{session_id} 的对话记录（{int(cleared or 0)} 条）")
+    return {"ok": True, "cleared": int(cleared or 0)}
+
+
 READ_ONLY_TOOLS = {
     "read_file",
     "read_memory",
@@ -657,7 +682,22 @@ def _idle_cap(ledger_open: bool) -> int:
     return AUTO_IDLE_LIMIT_WITH_COVERAGE if ledger_open else AUTO_IDLE_LIMIT
 
 
-async def _auto_loop(session_id: int, username: str, provider: str):
+def has_user_task(session_id: int) -> bool:
+    """这一栏有没有收到过「用户手打的任务」。
+
+    自动继续发出去的那句是 level=auto，不算任务：它会落成 user 消息，
+    但不能拿来证明「用户让这一栏干活了」。
+    """
+    with db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM chat_messages "
+            "WHERE session_id=? AND role='user' AND COALESCE(level,'')!='auto'",
+            (int(session_id),),
+        ).fetchone()
+    return bool(row and row["c"])
+
+
+async def _auto_loop(session_id: int, username: str, provider: str, max_rounds: int = 0):
     """一条用户消息进来后可能连着跑很多轮——这就是「自动继续」。
 
     每轮结束按顺序判断：开关还开着吗、用户停过吗、有没有等他拍板的事、
@@ -677,6 +717,15 @@ async def _auto_loop(session_id: int, username: str, provider: str):
     idle = 0
     note = ""
     retried = 0
+    # 闸门一：没收到用户任务的栏，谁也不许开工。
+    # 同伴同步过来的进展只是情报，不是「可以自己找活干」的许可。
+    if not has_user_task(session_id):
+        yield {
+            "type": "auto_end",
+            "reason": "这一栏还没收到你的任务，先不动手；同伴的进展已经记进协同对话，等你安排",
+            "rounds": 0,
+        }
+        return
     while True:
         round_index += 1
         before = _activity(session_id)
@@ -788,6 +837,16 @@ async def _auto_loop(session_id: int, username: str, provider: str):
             if summary_now["pending"]:
                 reason += f"（能力台账里还剩 {summary_now['pending']} 项没验）"
             yield _auto_end(session_id, reason, round_index)
+            return
+
+        # 闸门二：被同伴叫醒的那一轮只处理同伴消息，不许自己接龙。
+        # 否则对方随手同步一句，这一栏就顺着能力台账一路跑下去，用户看到的就是「没人下令它自己干」。
+        if max_rounds and round_index >= max_rounds:
+            yield _auto_end(
+                session_id,
+                "同伴的消息已经处理完，这一轮不自动接龙；要接着做就自己下发一句话",
+                round_index,
+            )
             return
 
         _append_user_message(session_id, text)
@@ -918,6 +977,9 @@ class PairIn(BaseModel):
     # 每一栏用哪份记忆：0 / 留空 = 默认记忆
     memory_a: int = 0
     memory_b: int = 0
+    # 这一栏参不参与：关掉一栏就是单模型干活
+    active_a: bool = True
+    active_b: bool = True
 
 
 class PairSayIn(BaseModel):
@@ -950,6 +1012,12 @@ def _wake_peer(session_id: int, username: str, text: str) -> bool:
         return False
     if agent_running(int(session_id)):
         return False
+    # 这一栏自己还没收到过用户任务：叫醒它也不该让它开工，消息已经记账了，等用户来安排
+    if not has_user_task(int(session_id)):
+        return False
+    # 关掉的栏不参与协同：同伴说它的，这一栏只记账不启动
+    if not pairs.lane_active(pairs.pair_for_session(int(session_id)), pairs.lane_of_session(int(session_id))):
+        return False
     # 被叫醒的这一栏继续用自己选的那个模型，不会因为同伴叫了一声就换成默认模型
     pair = pairs.pair_for_session(int(session_id))
     provider = pairs.lane_model(pair, pairs.lane_of_session(int(session_id)))
@@ -958,7 +1026,7 @@ def _wake_peer(session_id: int, username: str, text: str) -> bool:
         if agent_running(int(session_id)):
             return
         try:
-            start_run(int(session_id), _auto_loop(int(session_id), username, provider))
+            start_run(int(session_id), _auto_loop(int(session_id), username, provider, max_rounds=1))
         except Exception:  # 起不来就只留消息，别把发消息这一步也搞挂
             pass
 
@@ -1000,7 +1068,10 @@ async def create_pair(payload: PairIn, user=Depends(get_current_user)):
     for value in (memory_a, memory_b):
         if value and not memory_spaces.get_space(value, username):
             raise HTTPException(status_code=400, detail=f"记忆空间不存在：{value}")
-    pair = pairs.create_pair(username, title, a, b, workdir, memory_a, memory_b)
+    pair = pairs.create_pair(
+        username, title, a, b, workdir, memory_a, memory_b,
+        active_a=bool(payload.active_a), active_b=bool(payload.active_b),
+    )
     pairs.reset_budget(int(pair["id"]), pairs.DEFAULT_PEER_BUDGET)
     audit(
         username,
@@ -1068,6 +1139,9 @@ class PairPatchIn(BaseModel):
     # 记忆空间：0 或 None 都表示「跟随默认记忆」
     memory_a: int | None = None
     memory_b: int | None = None
+    # 单栏开关：关掉一栏，另一栏照跑，两边互不打扰
+    active_a: bool | None = None
+    active_b: bool | None = None
 
 
 @router.patch("/pairs/{pair_id}")
@@ -1120,7 +1194,32 @@ async def patch_pair(pair_id: int, payload: PairPatchIn, user=Depends(get_curren
                 names.append(f"{lane.upper()} 栏 → {(space or {}).get('name') or '默认记忆'}")
         if names:
             audit(username, "pair_memory", f"协同 #{pair_id} 换记忆：{'、'.join(names)}")
+    if payload.active_a is not None or payload.active_b is not None:
+        updated = pairs.set_active(
+            int(pair["id"]),
+            active_a=payload.active_a,
+            active_b=payload.active_b,
+        ) or updated
+        changed = []
+        for lane, value in (("a", payload.active_a), ("b", payload.active_b)):
+            if value is not None:
+                changed.append(f"{lane.upper()} 栏 {'开启' if value else '关闭'}")
+        if changed:
+            audit(username, "pair_active", f"协同 #{pair_id}：{'、'.join(changed)}")
     return updated or pair
+
+
+@router.delete("/pairs/{pair_id}/notes")
+async def clear_pair_notes(pair_id: int, user=Depends(get_current_user)):
+    """清空中间那条协同记录：两栏自己的对话不受影响，只把互发的消息清掉。"""
+    pair = _pair_of(pair_id, user.get("u", ""))
+    with db() as conn:
+        cleared = conn.execute(
+            "DELETE FROM chat_peer_notes WHERE pair_id=?", (int(pair["id"]),)
+        ).rowcount
+        conn.execute("UPDATE chat_pairs SET updated_at=? WHERE id=?", (now_iso(), int(pair["id"])))
+    audit(user.get("u", ""), "pair_clear_notes", f"清空协同 #{pair_id} 的协同记录（{int(cleared or 0)} 条）")
+    return {"ok": True, "cleared": int(cleared or 0)}
 
 
 @router.get("/pairs/{pair_id}/notes")
@@ -1155,7 +1254,15 @@ async def pair_say(pair_id: int, payload: PairSayIn, user=Depends(get_current_us
     if not content:
         raise HTTPException(status_code=400, detail="消息不能为空")
 
-    targets = ["a", "b"] if lane == "both" else [lane]
+    # 关掉的栏不接活：双发时自动跳过，单发时直接告诉他这一栏没开
+    if lane == "both":
+        targets = pairs.active_lanes(pair)
+        if not targets:
+            raise HTTPException(status_code=400, detail="两栏都关着，先打开一栏再下发")
+    else:
+        if not pairs.lane_active(pair, lane):
+            raise HTTPException(status_code=400, detail=f"{lane.upper()} 栏已关闭，打开后才能下发")
+        targets = [lane]
     sessions = _lane_sessions(pair)
     # 用户每次下发任务，重置互相唤醒的额度：一轮任务内够分工与汇合，又不会无限接龙
     pairs.reset_budget(int(pair["id"]), pairs.DEFAULT_PEER_BUDGET)
@@ -1196,16 +1303,22 @@ async def pair_say(pair_id: int, payload: PairSayIn, user=Depends(get_current_us
 
 
 @router.post("/pairs/{pair_id}/stop")
-async def pair_stop(pair_id: int, user=Depends(get_current_user)):
+async def pair_stop(pair_id: int, lane: str = "", user=Depends(get_current_user)):
+    """停止这一组：给了 lane 就只停那一栏，不给就两栏一起停。"""
     pair = _pair_of(pair_id, user.get("u", ""))
+    wanted = (lane or "").strip().lower()
+    if wanted and wanted not in ("a", "b"):
+        raise HTTPException(status_code=400, detail="lane 只能是 a / b，留空表示两栏都停")
     stopped: dict[str, bool] = {}
-    for lane, session_id in _lane_sessions(pair).items():
+    for item, session_id in _lane_sessions(pair).items():
+        if wanted and item != wanted:
+            continue
         hit = cancel_agent(session_id, "协同会话被停止")
         run = _RUNS.get(int(session_id))
         if run and run.task and not run.task.done():
             run.task.cancel()
             hit = True
-        stopped[lane] = bool(hit)
+        stopped[item] = bool(hit)
     return {"ok": True, "stopped": stopped}
 
 

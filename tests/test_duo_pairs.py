@@ -76,6 +76,19 @@ check("换模型不动会话", int(pairs.get_pair(int(same["id"]))["session_b"])
 with db() as conn:
     lane_title = conn.execute("SELECT title FROM chat_sessions WHERE id=?", (int(same["session_b"]),)).fetchone()["title"]
 check("会话标题跟着换模型", "openai" in str(lane_title))
+
+# 单栏开关：关掉一栏就只剩另一边干活，重新打开还能接上
+check("配对默认两栏都开着", pairs.lane_active(same, "a") and pairs.lane_active(same, "b"))
+check("两栏都开着时两边都算活跃", pairs.active_lanes(same) == ["a", "b"])
+shut_b = pairs.set_active(int(same["id"]), active_b=False)
+check("能单独关掉右栏", shut_b is not None and not pairs.lane_active(shut_b, "b"))
+check("关掉右栏后只剩左栏干活", pairs.active_lanes(shut_b) == ["a"])
+check("关栏不动会话", int(shut_b["session_b"]) == int(same["session_b"]))
+check("关栏不动模型和记忆", shut_b["model_b"] == shut_b["model_b"] and int(shut_b["memory_b"]) == int(same["memory_b"]))
+check("关栏会记更新时间", bool(shut_b.get("updated_at")))
+reopen = pairs.set_active(int(same["id"]), active_b=True)
+check("能重新打开右栏", pairs.lane_active(reopen, "b") and pairs.active_lanes(reopen) == ["a", "b"])
+check("老库没有开关字段时按开着算", pairs.lane_active({"id": 1}, "a") and pairs.active_lanes({"id": 1}) == ["a", "b"])
 with db() as conn:
     conn.execute("DELETE FROM chat_sessions WHERE id IN (?,?)", (int(same["session_a"]), int(same["session_b"])))
 pairs.delete_pair(int(same["id"]))
@@ -186,6 +199,15 @@ check("有协同详情接口", "/api/chat/pairs/{pair_id}" in routes)
 check("有协同记录接口", "/api/chat/pairs/{pair_id}/notes" in routes)
 check("有同时下发的接口", "/api/chat/pairs/{pair_id}/say" in routes)
 check("有停止接口", "/api/chat/pairs/{pair_id}/stop" in routes)
+check("有清空单栏对话的接口", "/api/chat/sessions/{session_id}/messages" in routes)
+check("有清空协同记录的接口", "/api/chat/pairs/{pair_id}/notes" in routes)
+chat_src = (ROOT / "mono/api/chat.py").read_text(encoding="utf-8")
+check("下发时跳过关掉的栏", "pairs.active_lanes(pair)" in chat_src)
+check("单栏关闭时拒收任务", "栏已关闭，打开后才能下发" in chat_src)
+check("停止接口支持只停一栏", 'lane: str = ""' in chat_src and "if wanted and item != wanted" in chat_src)
+check("被关掉的栏不会被同伴叫醒", "lane_active(pairs.pair_for_session" in chat_src)
+agent_src = (ROOT / "mono/engine/agent.py").read_text(encoding="utf-8")
+check("同伴关栏时只记账不唤醒", "栏已关闭，只记账" in agent_src)
 
 # 单会话列表不能把协同里的两条子会话混进去
 single = asyncio.run(chat_api.list_sessions({"u": "admin"}))
@@ -282,10 +304,38 @@ check("单会话布局还在", 'id="chat-layout"' in html and 'id="chat-messages
 check("单会话页能返回协同", 'id="chat-back-duo"' in html)
 check("加载了双模型脚本", "/static/duo.js" in html)
 
-check("三栏栅格：左右等宽、中间一小份", "grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr)" in css)
-check("侧栏收窄到 184", "grid-template-columns: 184px minmax(0, 1fr)" in css)
+check("三栏栅格：左右等宽、中间一小份", "grid-template-columns: minmax(0, 1fr) 292px minmax(0, 1fr)" in css)
+check("侧栏收窄到 152", "grid-template-columns: 152px minmax(0, 1fr)" in css)
 check("输入框有最小宽度兜底", "min-width: 150px" in css and "min-width: 120px" in css)
 check("协同记录卡片有样式", ".duo-note" in css and ".duo-files" in css)
+check("栏头有单栏开关", 'id="duo-a-on"' in html and 'id="duo-b-on"' in html)
+check("栏头有设置齿轮", 'id="duo-a-gear"' in html and 'id="duo-b-gear"' in html)
+check("设置面板默认收起", html.count('class="duo-lane-menu hidden"') == 2)
+# 模型下拉右边只留状态和齿轮：开关 / 记忆 / 停止 / 清空都挪进面板
+check(
+    "栏头只剩模型、状态和齿轮",
+    html.index('id="duo-a-model"') < html.index('id="duo-a-state"') < html.index('id="duo-a-gear"'),
+)
+check(
+    "开关记忆停止清空都在面板里",
+    html.index('id="duo-a-gear"') < html.index('id="duo-a-menu"') < html.index('id="duo-a-on"')
+    and html.index('id="duo-a-menu"') < html.index('id="duo-a-memory"')
+    and html.index('id="duo-a-menu"') < html.index('id="duo-a-stop"')
+    and html.index('id="duo-a-menu"') < html.index('id="duo-a-clear"'),
+)
+check("齿轮和面板有样式", ".duo-gear" in css and ".duo-lane-menu" in css)
+check("点齿轮才展开", "function duoToggleMenu(" in js and "duo-a-gear" not in js)
+check("点面板外面或按 Esc 收起", "function duoCloseMenus(" in js and 'event.key === "Escape"' in js)
+check("漏洞卡不再有看证据按钮", "看证据" not in appjs and "data-open-finding" not in appjs)
+check("每栏有单独的停止按钮", 'id="duo-a-stop"' in html and 'id="duo-b-stop"' in html)
+check("关闭态整栏变暗并且输入口锁住", ".duo-lane.off" in css and ".duo-lane.off .duo-composer" in css)
+check("前端会落库单栏开关", "function duoSetLaneActive(" in js and "active_a: !!on" in js)
+check("前端能只停一栏", "function duoStopLane(" in js and "/stop?lane=" in js)
+check("关掉一栏后同时下发只剩另一边", "DUO.lanes[key].active !== false" in js)
+check("三处都有单独的清空按钮", 'id="duo-a-clear"' in html and 'id="duo-b-clear"' in html and 'id="duo-notes-clear"' in html)
+check("前端能清空单栏与协同记录", "function duoClearLane(" in js and "function duoClearNotes(" in js)
+check("清空前先拦截运行中的栏", "先点「停这一栏」再清空" in js)
+check("清空只删消息不删会话", "/messages`, { method: \"DELETE\" }" in js)
 check("历史抽屉有样式", ".history-drawer" in css)
 
 check("前端按栏分流事件", "function duoEvent(" in js and "function duoConsume(" in js)

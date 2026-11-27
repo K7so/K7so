@@ -38,6 +38,8 @@ def create_pair(
     workdir: str,
     memory_a: int = 0,
     memory_b: int = 0,
+    active_a: bool = True,
+    active_b: bool = True,
 ) -> dict:
     """建一个配对：两条会话 + 一条配对记录。工作目录会被创建出来。"""
     ts = now_iso()
@@ -49,11 +51,12 @@ def create_pair(
     with db() as conn:
         cursor = conn.execute(
             "INSERT INTO chat_pairs (username, title, workdir, session_a, session_b, model_a, model_b,"
-            " memory_a, memory_b, peer_budget, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            " memory_a, memory_b, active_a, active_b, peer_budget, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 username, title[:60], workdir, 0, 0, model_a, model_b,
-                int(memory_a or 0), int(memory_b or 0), 0, ts, ts,
+                int(memory_a or 0), int(memory_b or 0),
+                1 if active_a else 0, 1 if active_b else 0, 0, ts, ts,
             ),
         )
         pair_id = int(cursor.lastrowid)
@@ -259,6 +262,49 @@ def set_memories(
     return get_pair(pair_id)
 
 
+def set_active(
+    pair_id: int,
+    active_a: bool | None = None,
+    active_b: bool | None = None,
+) -> dict | None:
+    """开关某一栏：关掉就只剩另一栏单模型干活。
+
+    只改「这一栏参不参与」，不动会话内容、记忆和共享目录；重新打开还能接着干。
+    """
+    pair = get_pair(pair_id)
+    if not pair:
+        return None
+    fields: list[str] = []
+    values: list[object] = []
+    for column, value in (("active_a", active_a), ("active_b", active_b)):
+        if value is None:
+            continue
+        fields.append(f"{column}=?")
+        values.append(1 if value else 0)
+    if not fields:
+        return pair
+    fields.append("updated_at=?")
+    values.append(now_iso())
+    values.append(int(pair_id))
+    with db() as conn:
+        conn.execute(f"UPDATE chat_pairs SET {', '.join(fields)} WHERE id=?", tuple(values))
+    return get_pair(pair_id)
+
+
+def lane_active(pair: dict | None, lane: str) -> bool:
+    """这一栏是不是开着。老库没有这两个字段时按「开着」处理。"""
+    if not pair:
+        return True
+    key = "active_a" if lane == "a" else "active_b"
+    if key not in pair:
+        return True
+    return bool(int(pair.get(key) if pair.get(key) is not None else 1))
+
+
+def active_lanes(pair: dict | None) -> list[str]:
+    return [lane for lane in LANES if lane_active(pair, lane)]
+
+
 # ---------------- 两个模型之间的对话 ----------------
 
 def add_note(pair: dict, from_lane: str, content: str, status: str = "pending") -> dict:
@@ -395,7 +441,9 @@ def prompt_block(session_id: int) -> str:
     return (
         "【双模型协同模式】\n"
         f"- 你是{_side(lane)}「{mine}」，同伴是{_side('b' if lane == 'a' else 'a')}「{other}」。"
-        "用户同一句话会同时发给你们两个人，你们在同一份工作上并行推进。\n"
+        "用户可能同一句话同时发给你们两个人，也可能只发给其中一个人（只发给对方的那句不是你的任务）。\n"
+        "- 【只做用户交给你的任务】开工的唯一理由是用户在这一栏下发了任务。没收到任务就不要自己找目标、"
+        "不要照着同伴的话题另起一件事；协同对话里的进展只当情报看，看完该等就等。\n"
         f"- 你的记忆空间：「{mine_memory}」，同伴用的是「{other_memory}」。两份记忆是分开的："
         "你读不到对方的记忆，也不要假设对方读过你的。要让它知道的事，靠协同对话说清楚。\n"
         f"- 共享工作目录：{shared}。双方的命令、脚本、落地文件都在这一个目录里，"

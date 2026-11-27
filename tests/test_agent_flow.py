@@ -1457,6 +1457,19 @@ def test_work_digest_survives_history_budget() -> None:
     check("历史确实已经被裁掉", not any("关键突破" in str(m["content"]) for m in history))
     check("台账把进度写成分步记录", "已执行的步骤" in digest, digest[:80])
 
+    # 用户问「某某站点你测过没」：目标清单要按整场会话累计，不能被最近几十条进度挤掉
+    say(sid, "已请求 office.infosec.com.cn:8085/api/site/config 回来了 200", "progress")
+    for index in range(150):
+        say(sid, f"填充进度 {index}", "progress")
+    digest_targets = agent._work_digest(sid)
+    check(
+        "目标清单不受最近进度条数限制",
+        "office.infosec.com.cn:8085" in digest_targets,
+        digest_targets[:200],
+    )
+    check("目标清单写明被问时以它为准", "以这里为准" in digest_targets)
+    check("文件名不会被当成目标", "清单.md" not in digest_targets and ".md" not in digest_targets)
+
 
 async def test_question_mode_answers_without_rerun() -> None:
     """用户提问时：可以核对结论，但不能重新执行（跑脚本 / 发包 / 重扫）。"""

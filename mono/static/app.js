@@ -6,7 +6,7 @@ const SEV_LABELS = { critical: "严重", high: "高危", medium: "中危", low: 
 const STATUS_LABELS = { queued: "排队", running: "运行中", completed: "已完成", failed: "失败", cancelled: "已取消" };
 const PAGE_TITLES = {
   dashboard: "仪表盘", chat: "智能工作", assets: "资产监管", kits: "K7so工具", scans: "渗透测试",
-  findings: "漏洞结果", connectors: "API 中心", paths: "目录配置", memory: "模型记忆", capabilities: "模型能力",
+  findings: "漏洞结果", connectors: "API 中心", paths: "模型记忆", capabilities: "模型能力",
   audit: "审计日志", settings: "平台设置",
 };
 const CATEGORY_ORDER = ["ai", "recon", "intel", "vuln", "tool"];
@@ -338,8 +338,11 @@ async function navigate(page) {
     if (page === "kits") await loadKits();
     if (page === "findings") await loadFindings();
     if (page === "connectors") await loadConnectors();
-    if (page === "paths") await loadPaths();
-    if (page === "memory") await loadMemory();
+    if (page === "paths") {
+      await loadPaths();
+      // 记忆空间和目录设置现在是同一页：进来就一起读，别让人只看到半页
+      await loadMemory().catch((error) => toast(error.message, "error"));
+    }
     if (page === "capabilities") await loadCapabilities();
     if (page === "audit") await loadAudit();
     if (page === "settings") await loadSettings();
@@ -2047,7 +2050,7 @@ $("#paths-save").addEventListener("click", async () => {
         work_dir: $("#d-work-dir").value.trim(),
       },
     });
-    toast("目录配置已保存");
+    toast("目录设置已保存");
     await loadPaths();
   } catch (error) { toast(error.message, "error"); }
 });
@@ -2066,7 +2069,7 @@ function memoryCard(space) {
   return `<article class="memory-card${isDefault ? " default" : ""}">
     <div class="memory-head">
       <strong>${esc(space.name || "未命名")}</strong>
-      <span class="memory-tag${isDefault ? " on" : ""}">${isDefault ? "跟随目录配置" : "独立"}</span>
+      <span class="memory-tag${isDefault ? " on" : ""}">${isDefault ? "跟随默认记忆" : "独立"}</span>
     </div>
     <div class="memory-dir">${esc(space.dir || "")}</div>
     <div class="memory-meta">${Number(space.files || 0)} 个文件 · ${memorySize(space.bytes)}${space.exists ? "" : " · 目录不存在"}</div>
@@ -2511,7 +2514,6 @@ function chatConfirmCard(message) {
 function chatFindingCard(message) {
   const card = message.finding || {};
   const sev = ["critical", "high", "medium", "low", "info"].includes(card.severity) ? card.severity : "info";
-  const id = Number(card.finding_id || 0);
   const domain = card.domain || "未标注域名";
   const url = card.url || "";
   return `<div class="chat-msg finding">
@@ -2519,7 +2521,6 @@ function chatFindingCard(message) {
       <div class="chat-finding-head">
         ${sevBadge(sev)}
         <strong>${esc(card.title || "未命名漏洞")}</strong>
-        ${id ? `<button class="link finding-open" data-open-finding="${id}">看证据 →</button>` : ""}
       </div>
       <div class="chat-finding-meta">
         <span class="chip mono">${esc(domain)}</span>
@@ -3790,11 +3791,6 @@ $("#chat-messages").addEventListener("click", (event) => {
     const text = String(message?.content || "");
     if (!text) { toast("这条没有可复制的内容", "error"); return; }
     copyText(text).then((ok) => toast(ok ? "已复制" : "复制失败，请手动选中", ok ? "" : "error"));
-    return;
-  }
-  const openFindingBtn = event.target.closest("[data-open-finding]");
-  if (openFindingBtn) {
-    openFinding(Number(openFindingBtn.dataset.openFinding));
     return;
   }
   const button = event.target.closest("[data-decide]");

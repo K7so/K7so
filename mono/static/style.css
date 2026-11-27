@@ -94,15 +94,15 @@ body::before {
 }
 
 /* ---------- layout ---------- */
-.app { display: grid; grid-template-columns: 184px minmax(0, 1fr); min-height: 100vh; position: relative; z-index: 1; }
+.app { display: grid; grid-template-columns: 152px minmax(0, 1fr); min-height: 100vh; position: relative; z-index: 1; }
 .sidebar {
   border-right: 1px solid var(--line);
   background: rgba(5,10,15,.94);
   display: flex; flex-direction: column;
   position: sticky; top: 0; height: 100vh; z-index: 20;
 }
-.side-brand { padding: 20px 13px 16px; border-bottom: 1px solid var(--line); }
-.logo { font-family: var(--mono); font-size: 23px; font-weight: 700; letter-spacing: .14em; }
+.side-brand { padding: 16px 11px 13px; border-bottom: 1px solid var(--line); }
+.logo { font-family: var(--mono); font-size: 21px; font-weight: 700; letter-spacing: .14em; }
 .logo span { color: var(--accent); }
 .logo-sub { color: var(--dim); font-family: var(--mono); font-size: 9px; letter-spacing: .3em; margin-top: 4px; }
 .side-nav { padding: 12px 0; flex: 1; overflow-y: auto; }
@@ -110,7 +110,7 @@ body::before {
   width: 100%; display: flex; align-items: center; gap: 11px;
   background: none; border: 0; border-left: 2px solid transparent;
   color: var(--muted); text-align: left; cursor: pointer;
-  padding: 11px 16px; font-size: 12.5px; font-family: var(--sans);
+  padding: 10px 12px; font-size: 12px; font-family: var(--sans);
   transition: color .15s, background .15s, border-color .15s;
 }
 .nav-item .idx { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: .06em; }
@@ -121,7 +121,7 @@ body::before {
   background: linear-gradient(90deg, rgba(53,214,240,.15), rgba(53,214,240,.02));
 }
 .nav-item.active .idx { color: var(--accent); }
-.side-foot { border-top: 1px solid var(--line); padding: 14px 13px 18px; display: grid; gap: 12px; }
+.side-foot { border-top: 1px solid var(--line); padding: 12px 11px 14px; display: grid; gap: 12px; }
 .side-user { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; }
 .side-user small { display: block; color: var(--dim); font-size: 9px; letter-spacing: .1em; }
 .side-user strong { font-weight: 500; color: var(--text); }
@@ -1198,7 +1198,6 @@ td.mono-cell, td .mono { font-size: 14px; }
 .chat-finding.hit-low, .chat-finding.hit-info { border-left-color: #35506a; border-color: var(--line); background: #061019; }
 .chat-finding-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .chat-finding-head strong { font-size: 15px; font-weight: 650; line-height: 1.5; color: var(--white); background: none; }
-.chat-finding-head .finding-open { margin-left: auto; font-size: 11.5px; }
 .chat-finding-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .chat-finding-url { font-size: 10.5px; color: var(--dim); word-break: break-all; }
 
@@ -1515,7 +1514,7 @@ td.mono-cell, td .mono { font-size: 14px; }
 
 .duo-body {
   flex: 1; min-height: 0; display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 292px minmax(0, 1fr);
   gap: 10px;
 }
 .duo-lane {
@@ -1523,18 +1522,63 @@ td.mono-cell, td .mono { font-size: 14px; }
   border: 1px solid var(--line); background: rgba(6,11,17,.94);
 }
 .duo-lane-head {
-  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  position: relative;
+  display: flex; align-items: center; gap: 8px; padding: 9px 12px;
   border-bottom: 1px solid var(--line);
 }
 .duo-model { flex: 1; min-width: 0; font-size: 12.5px; height: 30px; }
-/* 记忆下拉比模型窄：它是「读哪份笔记」，不需要占满一整行 */
-.duo-memory { width: 104px; flex: none; font-size: 12px; height: 30px; padding: 0 6px; color: var(--muted); }
+/* 记忆下拉放在设置面板里，占满一行 */
+.duo-memory { width: 100%; flex: none; font-size: 12px; height: 30px; padding: 0 6px; color: var(--muted); }
+
+/* 栏头右边只留一个齿轮：模型以外的配置都收进它展开的面板 */
+.duo-gear {
+  flex: none; width: 30px; height: 30px; display: grid; place-items: center;
+  border: 1px solid var(--line-strong); background: transparent; color: var(--muted);
+  cursor: pointer; transition: color .15s, border-color .15s, background .15s;
+}
+.duo-gear:hover { color: var(--text); border-color: var(--accent-line); }
+.duo-gear.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.duo-gear svg { width: 15px; height: 15px; }
+.duo-lane-menu {
+  position: absolute; top: calc(100% + 6px); right: 10px; z-index: 40;
+  width: 236px; padding: 10px; display: grid; gap: 10px;
+  border: 1px solid var(--line-strong); background: #0a121b;
+  box-shadow: 0 16px 36px rgba(0,0,0,.6);
+}
+.duo-lane-menu.hidden { display: none; }
+.duo-menu-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 12px; color: var(--muted);
+}
+.duo-menu-row.col { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+.duo-menu-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.duo-menu-actions .btn { flex: none; min-width: 92px; justify-content: center; }
 .duo-state {
   font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em;
   padding: 2px 8px; border: 1px solid var(--line-strong); color: var(--muted);
   white-space: nowrap;
 }
 .duo-state.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+/* 单栏开关：关掉这一栏就只剩另一边干活，界面上整栏变暗、输入口锁住 */
+.duo-switch { position: relative; width: 32px; height: 18px; flex: none; cursor: pointer; }
+.duo-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.duo-switch span {
+  display: block; width: 32px; height: 18px; border: 1px solid var(--line-strong);
+  background: rgba(4,9,14,.95); transition: background .15s, border-color .15s;
+}
+.duo-switch span::after {
+  content: ""; position: absolute; top: 4px; left: 4px; width: 10px; height: 10px;
+  background: #55636f; transition: transform .15s, background .15s;
+}
+.duo-switch input:checked + span { border-color: var(--accent); background: rgba(53,214,240,.07); }
+.duo-switch input:checked + span::after { transform: translateX(14px); background: var(--accent); box-shadow: 0 0 6px rgba(53,214,240,.7); }
+.duo-stop-lane { flex: none; }
+/* 关掉的栏：对话区和输入口变暗锁住，栏头保持正常亮度，齿轮还能点开重新打开 */
+.duo-lane.off .duo-stream,
+.duo-lane.off .duo-composer { opacity: .5; pointer-events: none; }
+/* 协同记录头：条数靠右，清空按钮跟在后面 */
+.duo-peer-head .hint { margin-left: auto; }
+.duo-peer-head .btn { flex: none; padding: 2px 8px; font-size: 11px; }
 .duo-stream { flex: 1; min-height: 0; }
 .duo-stream .chat-messages { padding: 14px 14px 8px; gap: 12px; }
 .duo-stream .chat-msg { max-width: 100%; }
@@ -1625,13 +1669,14 @@ td.mono-cell, td .mono { font-size: 14px; }
 .history-main small { font-family: var(--mono); font-size: 10.5px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 1280px) {
-  .duo-body { grid-template-columns: minmax(0, 1fr) 200px minmax(0, 1fr); }
+  .duo-body { grid-template-columns: minmax(0, 1fr) 240px minmax(0, 1fr); }
   .duo-dir .input { width: min(220px, 24vw); }
 }
 @media (max-width: 1000px) {
   #page-chat .duo-shell { height: auto; }
   .duo-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .duo-lane { min-height: 52vh; }
+  .duo-lane-menu { width: 100%; left: 0; right: 0; }
   .duo-peer { grid-column: 1 / -1; min-height: 220px; order: 3; }
   .duo-dir .input { width: 100%; }
 }

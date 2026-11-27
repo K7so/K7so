@@ -421,6 +421,9 @@ def _migrate_chat_pairs(conn: sqlite3.Connection) -> None:
     for name, ddl in (
         ("memory_a", "INTEGER NOT NULL DEFAULT 0"),
         ("memory_b", "INTEGER NOT NULL DEFAULT 0"),
+        # 这一栏参不参与：关掉一栏就只剩单模型干活，另一栏既不接话也不被唤醒
+        ("active_a", "INTEGER NOT NULL DEFAULT 1"),
+        ("active_b", "INTEGER NOT NULL DEFAULT 1"),
     ):
         if name not in existing:
             conn.execute(f"ALTER TABLE chat_pairs ADD COLUMN {name} {ddl}")

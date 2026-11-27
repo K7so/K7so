@@ -259,6 +259,20 @@ def _count_auto_rounds(sid: int, limit: int = 25) -> tuple[int, list[dict]]:
     import asyncio
 
     import mono.api.chat as chat_mod
+    from mono.db import db as _db
+
+    # 闸门要求「这一栏收到过用户任务」才允许接龙；测试会话直接补一条手打的任务消息
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM chat_messages WHERE session_id=? AND role='user' "
+            "AND COALESCE(level,'')!='auto'",
+            (int(sid),),
+        ).fetchone()
+        if not row or not row["c"]:
+            conn.execute(
+                "INSERT INTO chat_messages (session_id, role, content, level, created_at) VALUES (?,?,?,?,?)",
+                (int(sid), "user", "把这件事做完", "", time.strftime("%Y-%m-%dT%H:%M:%S")),
+            )
 
     events: list[dict] = []
     original = chat_mod.run_agent
@@ -880,6 +894,42 @@ def main() -> int:
         )
         chat_src = (ROOT / "mono/api/chat.py").read_text(encoding="utf-8")
         check("台账没满不再按空转收手（旧的 20 轮说法已删）", "任务未完成：能力台账" not in chat_src)
+
+        # 闸门：一栏没收到用户任务时，谁叫都不许开工（同伴同步的消息只能记账）
+        import asyncio as _aio
+
+        naked_sid = client.post("/api/chat/sessions", json={"title": "没任务"}).json().get("id")
+        if isinstance(naked_sid, int):
+
+            async def _naked():
+                gen = _chat_mod._auto_loop(naked_sid, "admin", "")
+                return [item async for item in gen]
+
+            naked_events = _aio.run(_naked())
+            check(
+                "没收到用户任务就不开工",
+                bool(naked_events) and naked_events[0].get("type") == "auto_end"
+                and naked_events[0].get("rounds") == 0,
+                str(naked_events[:1])[:160],
+            )
+            from mono.db import db as _db3
+
+            with _db3() as conn:
+                conn.execute(
+                    "INSERT INTO chat_messages (session_id, role, content, level, created_at) "
+                    "VALUES (?,?,?,?,?)",
+                    (naked_sid, "user", "继续", "auto", time.strftime("%Y-%m-%dT%H:%M:%S")),
+                )
+            check("自动接龙那句不算用户任务", _chat_mod.has_user_task(naked_sid) is False)
+        else:
+            check("没收到用户任务就不开工", False, "缺少 session id")
+            check("自动接龙那句不算用户任务", False, "缺少 session id")
+
+        wake_src = chat_src[chat_src.index("def _wake_peer("):]
+        wake_src = wake_src[: wake_src.index("set_peer_wake_hook")]
+        check("同伴叫醒也不越过没任务这道闸", "has_user_task" in wake_src)
+        check("被同伴叫醒只跑一轮、不接龙", "max_rounds=1" in wake_src)
+        check("协同提示写明没任务不动手", "只做用户交给你的任务" in (ROOT / "mono/engine/pairs.py").read_text(encoding="utf-8"))
         check("自动继续写清「台账没满不收手」", "台账没清空时第 2 条不生效" in chat_src)
 
         # 台账没满：空转 25 轮也照样往下发（旧逻辑 20 轮就停了）
